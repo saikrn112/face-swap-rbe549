@@ -1,4 +1,4 @@
-# Face Swapping - Project 2 - RBE549 Computer Vision
+# Face Swapping - Project 2 - RBE549
 Swap faces in the video using classical and deep learning approach
 
 ## Collaborators 
