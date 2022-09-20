@@ -1,4 +1,4 @@
-# Face Swapping - Project 2 - RBE549 Geometrical and Deep learning methods for CV
+# Face Swapping - Project 2 - RBE549 Computer Vision
 Swap faces in the video using classical and deep learning approach
 
 ## Collaborators 
