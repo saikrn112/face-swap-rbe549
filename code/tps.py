@@ -80,11 +80,33 @@ def get_loc_in_a(landmarks_b: List[Tuple], point_in_b: Tuple, tps_params) -> Tup
     dim(output): 1x2
     """
 
-
-def construct_img():
-    pass
-
-
+def construct_img(landmarks_b: List[Tuple], 
+                    parameters: List[Tuple], 
+                    image_a: List[List[Tuple]],
+                    img_shape: Tuple):
+    """
+    landmarks_b - nx2
+    parameters - (n+3)x2
+    image_a - k
+    img_shape - 1x2
+    """
+    x_values = np.arange(0,img_shape.shape[1]+1,1)
+    y_values = np.arange(0,img_shape.shape[0]+1,1)
+    x, y = np.meshgrid(x_values,y_values)
+    indices_in_b = np.array([x.flatten(),y.flatten()]).T
+    k = get_tps_matrix(landmarks_b,indices_in_b) # mxn
+    indices_in_a = k @ parameters
+    """
+    problems
+    1: indices_in_a is maynot be integer
+        bilinear interploation? -- scipy.interpolate.interp2d
+    2: patch shapes are not same so indices from B might not map within image A
+        should we add boundaries as control points
+    """
+    image_b_warped = np.zeros(shape=(img_shape.shape[0],img_shape.shape[1],3))
+    image_b_warped[indices_in_b[:,0],indices_in_bi[:,1],:] = image_a[indices_in_a[:,0],indices_in_a[:,1],:]
+    return image_b_warped
+    
 def main():
     # Read image/s
     # Save crops of faces in image frame
