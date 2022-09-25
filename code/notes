@@ -1,0 +1,12 @@
+problems
+--------
+1: indices_in_a is maynot be integer
+    bilinear interploation? -- scipy.interpolate.interp2d
+2: patch shapes are not same so indices from B might not map within image A
+    should we add boundaries as control points
+3: triangulation is not same because control points might not be aligning properly
+    should we ignore such triangles
+    verify:
+        why vertices are not satisfying inverted barycentric coords
+            as a workaround, use shapely and check if point is in triangle
+        change dst_shape coords reference to image_coords

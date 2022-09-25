@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import dlib
+import random
 
 # Define what landmarks you want:
 JAWLINE_POINTS = list(range(0, 17))
@@ -72,7 +73,8 @@ def draw_shape_points(np_shape, image_orig):
     for (x, y) in np_shape:
         cv2.circle(image, (x, y), 2, (0, 255, 0), -1)
 
-def draw_fiducials(fiducials, image):
+def draw_fiducials(fiducials, img_orig, window_name):
+    image = img_orig.copy()
     #Draw all lines connecting the different face parts:
     draw_shape_lines_all(fiducials, image)
 
@@ -87,8 +89,7 @@ def draw_fiducials(fiducials, image):
     # Draw all shape points:
     draw_shape_points(fiducials, image)
     # Confirm no. of points for different faces are same
-    cv2.imshow("image",image)
-    cv2.waitKey(0)
+    cv2.imshow(f"{window_name}_fiducials",image)
 
 # Check if a point is inside a rectangle
 def rect_contains(rect, point) :
@@ -103,8 +104,9 @@ def rect_contains(rect, point) :
     return True
 
 # Draw delaunay triangles
-def draw_delaunay(img_orig, triangleList, delaunay_color,display=True) :
+def draw_delaunay(img_orig, triangleList, window_name_prefix) :
     img = img_orig.copy()
+    random.seed(45)
 
     size = img.shape
     r = (0, 0, size[1], size[0])
@@ -116,21 +118,21 @@ def draw_delaunay(img_orig, triangleList, delaunay_color,display=True) :
         pt3 = (int(t[4]), int(t[5]))
 
         if rect_contains(r, pt1) and rect_contains(r, pt2) and rect_contains(r, pt3) :
-
+            delaunay_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
             cv2.line(img, pt1, pt2, delaunay_color, 1, cv2.LINE_AA, 0)
             cv2.line(img, pt2, pt3, delaunay_color, 1, cv2.LINE_AA, 0)
             cv2.line(img, pt3, pt1, delaunay_color, 1, cv2.LINE_AA, 0)
 
-    if display:
-        cv2.imshow("delaunay",img)
-        cv2.waitKey(0)
+    cv2.imshow(f"{window_name_prefix}_delaunay",img)
 
 # Draw voronoi diagram
-def draw_voronoi(img, subdiv) :
+def draw_voronoi(img_orig, subdiv,window_name_prefix) :
+    img = img_orig.copy()
 
     ( facets, centers) = subdiv.getVoronoiFacetList([])
+    print(f"facets:{len(facets)}")
 
-    for i in xrange(0,len(facets)) :
+    for i in range(0,len(facets)) :
         ifacet_arr = []
         for f in facets[i] :
             ifacet_arr.append(f)
@@ -141,8 +143,16 @@ def draw_voronoi(img, subdiv) :
         cv2.fillConvexPoly(img, ifacet, color, cv2.LINE_AA, 0);
         ifacets = np.array([ifacet])
         cv2.polylines(img, ifacets, True, (0, 0, 0), 1, cv2.LINE_AA, 0)
-        cv2.circle(img, (centers[i][0], centers[i][1]), 3, (0, 0, 0), cv2.cv.CV_FILLED, cv2.LINE_AA, 0)
+        cv2.circle(img, (int(centers[i][0]), int(centers[i][1])), 3, (0, 0, 0), 1 , cv2.LINE_AA, 0)
+
+    cv2.imshow(f"{window_name_prefix}_voronoi",img)
 
 def dlib_fiducials_to_tuple(fiducials):
     return (fiducials.left(),fiducials.top(),fiducials.right(),fiducials.bottom())
 
+def dlib_rect_to_img_shape(rect):
+    return [rect.bottom() - rect.top(), rect.right() - rect.left()]
+
+def get_colors(n):
+    random.seed(45) 
+    color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
