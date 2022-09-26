@@ -2,11 +2,12 @@ import cv2
 import numpy as np
 from dlib import full_object
 from typing import List, Tuple
-
+#### NOTE any coords below is actually array indices
 
 def get_fiducial_landmarks(image: List[List]) -> List[Tuple]:
     """
     Confirm no. of points for different faces are same
+    make sure to convert opencv convention to numpy convention
     """
     pass
 
@@ -30,28 +31,32 @@ def get_rbf(points1: Tuple, points2: Tuple) -> float:
     """
     1x2, 1x2 -> 1x1
     """
-    norm = abs(points1 - points2)
+    x1,y1 = points1
+    x2,y2 = points2
+    norm = abs(y2 - y1) + abs(x2-x1)
     norm_sq = norm**2
     return norm_sq*np.log(norm_sq)
 
 
-def get_k_matrix(points: List[Tuple]) -> List[List]:
+def get_k_matrix(landmarks: List[Tuple],coords: List[Tuple]) -> List[List]:
     """
-    nx2 -> nxn
+    landmarks - nx2
+    coords - mx2
+    output k matrix - mxn
     """
-    k = np.zeroes(shape=(len(points), len(points)))
-    for i, point_i in enumerate(points):
-        for j, point_j in enumerate(points):
-            k[i, j] = get_rbf(point_i, point_j)
+    k = np.zeroes(shape=(len(coords), len(landmarks)))
+    for i, coord in enumerate(coords):
+        for j, landmark in enumerate(landmarks):
+            k[i, j] = get_rbf(coord, landmark)
     return k
 
 
-def get_tps_matrix(landmarks: List[Tuple]) -> List[List[int]]:
+def get_tps_matrix(landmarks: List[Tuple], coords: List[Tuple]) -> List[List[int]]:
     """
     nx2 -> (n+3) x (n+3)
     """
     k = get_k_matrix(landmarks)  # nxn
-    p = homogenize_coords(landmarks)  # nx3
+    p = homogenize_coords(coords)  # nx3
 
     tps1 = np.hstack((k, p))
     tps2 = np.hstack((p.T, np.zeros((3, 3))))
@@ -66,7 +71,7 @@ def get_tps_parameters(landmarks_a: List[Tuple], landmarks_b: List[Tuple], lmbda
     dim(output): (n+3)x2 (parameters for both x and y)
     """
     rhs = append_zeros_to_landmarks(landmarks_a)
-    tps = get_tps_matrix(landmarks_b)
+    tps = get_tps_matrix(landmarks_b,landmarks_b)
     tps = tps + lmbda * np.identity(len(landmarks_b)+3)
     params = np.dot(np.linalg.inv(tps), rhs)
     return params
@@ -100,6 +105,7 @@ def construct_img(landmarks_b: List[Tuple],
     problems
     1: indices_in_a is maynot be integer
         bilinear interploation? -- scipy.interpolate.interp2d
+
     2: patch shapes are not same so indices from B might not map within image A
         should we add boundaries as control points
     """
