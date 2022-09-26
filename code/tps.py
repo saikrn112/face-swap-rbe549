@@ -104,7 +104,8 @@ def construct_img(landmarks_b: List[Tuple],
     """
     problems
     1: indices_in_a is maynot be integer
-        bilinear interploation?
+        bilinear interploation? -- scipy.interpolate.interp2d
+
     2: patch shapes are not same so indices from B might not map within image A
         should we add boundaries as control points
     """

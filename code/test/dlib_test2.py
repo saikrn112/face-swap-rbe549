@@ -84,7 +84,7 @@ def shape_to_np(dlib_shape, dtype="int"):
     return coordinates
 
 # Name of the two shape predictors:
-p = "../data/shape_predictor_68_face_landmarks.dat"
+p = "../../data/shape_predictor_68_face_landmarks.dat"
 # p = "shape_predictor_5_face_landmarks.dat"
 
 # Initialize frontal face detector and shape predictor:
@@ -92,7 +92,7 @@ detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor(p)
 
 # You can use a test image for debugging purposes:
-test_face = cv2.imread("../data/jenny.jpg")
+test_face = cv2.imread("../../data/jenny.jpg")
 test_gray = cv2.cvtColor(test_face, cv2.COLOR_BGR2GRAY)
 
 # Detect faces:
