@@ -2,6 +2,22 @@ import numpy as np
 import cv2
 import dlib
 import random
+from typing import List, Tuple
+
+def get_fiducial_landmarks(predictor,image: List[List], rect: List[Tuple], args, window_name) -> List[Tuple]:
+    # get Fiducials
+    fiducials_objects = predictor(image, rect)
+
+    fiducials = shape_to_np(fiducials_objects)
+    print(f"fiducials_shape:{fiducials.shape}")
+
+    if args.display:
+        draw_fiducials(fiducials, image, window_name)
+
+    # TODO better soln
+    #fiducials = np.delete(fiducials,[17,26],axis=0)
+
+    return fiducials
 
 # Define what landmarks you want:
 JAWLINE_POINTS = list(range(0, 17))
@@ -147,11 +163,17 @@ def draw_voronoi(img_orig, subdiv,window_name_prefix) :
 
     cv2.imshow(f"{window_name_prefix}_voronoi",img)
 
-def dlib_fiducials_to_tuple(fiducials):
-    return (fiducials.left(),fiducials.top(),fiducials.right(),fiducials.bottom())
+def dlib_rect_to_tuple(rect):
+    return (rect.left(),rect.top(),rect.right(),rect.bottom())
 
-def dlib_rect_to_img_shape(rect):
+def dlib_rect_to_shape(rect):
     return [rect.bottom() - rect.top(), rect.right() - rect.left()]
+
+def dlib_rect_to_bbox_coords(rect):
+    return np.array([[rect.left(),rect.top()],
+            [rect.left(),rect.bottom()],
+            [rect.right(),rect.bottom()],
+            [rect.right(),rect.top()]])
 
 def get_colors(n):
     random.seed(45) 
