@@ -111,7 +111,8 @@ def warp_patch(landmarks_from : List[Tuple],
         bilinear interploation? -- scipy.interpolate.interp2d
 
     2: patch shapes are not same, so coords from B might not map within image A
-        should we add boundaries as control points - TODO
+        should we add boundaries as control points - we did, might need to add
+            more points on the boundary
     """
 
     warped_patch_shape = dlib_rect_to_shape(patch_rect_to)
@@ -159,9 +160,6 @@ def main(args):
     landmarks_b = get_fiducial_landmarks(predictor,frame,rect_b,args,"b")
 
     # appending rectangle boundaries as landmarks
-    """
-    can add rectangle's middle points for better warping?
-    """
     rect_bb_coords_a = dlib_rect_to_bbox_coords(rect_a)
     rect_bb_coords_b = dlib_rect_to_bbox_coords(rect_b)
     landmarks_a = np.concatenate((landmarks_a,rect_bb_coords_a),axis=0)
@@ -174,6 +172,20 @@ def main(args):
     #print(f"landmarks_to:{landmarks_a}")
     print(f"rect_a:{rect_a}")
     print(f"rect_b:{rect_b}")
+    """
+    problems TODO
+    1. even though landmarks are mapping correctly, rest of the indices are not
+        in fact, they are going negative and out of bounds of image dimensions
+        which doesnt make sense
+            - can add rectangle's middle points for better warping?
+            - plot how f_x and f_y mapping is changing w.r.t to x,y
+                to get better idea of the fit
+                maybe the RBF that's used is not a good fit?
+
+    2. changing lambda is affecting the output a lot, so probably have to plot
+        function outputs against that to check if they make sense
+            currently 1e-3 looks stable
+    """
     warped_b = warp_patch(landmarks_b, warped_params_of_b, frame, rect_b)
 
     # Get (x, y) for a
