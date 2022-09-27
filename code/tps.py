@@ -88,18 +88,23 @@ def warp_patch(landmarks_from : List[Tuple],
 
     x, y = np.meshgrid(x_values,y_values)
     coords_from = np.array([x.flatten(),y.flatten()]).T
-    #coords_from = landmarks_from
+    #coords_from = landmarks_from[20:50,:]
+    print(f"coords_from_shape:{coords_from.shape}")
+    coords_from_orig = coords_from
+    coords_from = coords_from_orig[0:6000,:]
+    coords_from = np.concatenate((coords_from,coords_from_orig[10000:11000,:]),axis=0)
 
     tps_mat = get_tps_matrix(landmarks_from,coords_from, True) # mxn
-    print(f"tps_mat:{tps_mat.shape}")
-    print(f"parameters_shape:{parameters.shape}")
+    #print(f"rect_to:{patch_rect_to}")
+    #print(f"tps_mat:{tps_mat.shape}")
+    #print(f"parameters_shape:{parameters.shape}")
     #print(f"parameters:{parameters}")
 
     coords_to = tps_mat @ parameters
+    #print(f"coords_from:{coords_from}")
+    #print(f"coords_to:{coords_to}")
     coords_to = coords_to.astype(int)
 
-    print(f"coords_from:{coords_from}")
-    print(f"coords_to:{coords_to}")
     """
     problems
     1: coords_to maynot be an integer
@@ -115,6 +120,13 @@ def warp_patch(landmarks_from : List[Tuple],
     print(f"warped_patch_shape:{warped_patch.shape}")
 
     frame_copy = frame.copy()
+    print(f"max_i:{np.max(coords_to[:,1])}")
+    #frame[coords_to[:,1],coords_to[:,0],:]
+#    for i,coord_i in enumerate(coords_to[:,1]):
+#        for j,coord_j in enumerate(coords_to[:,0]):
+#            if coord_i < 0 or coord_i >= 400 or coord_j < 0 or coord_j >= 550:
+#                continue
+#            frame_copy[coords_from[i,1],coords_from[j,:0]] = frame[coord_i,coord_j]
     frame_copy[coords_from[:,1],coords_from[:,0],:] = frame[coords_to[:,1],coords_to[:,0],:]
 
     cv2.imshow("warped_frame",frame_copy)
@@ -159,8 +171,10 @@ def main(args):
     warped_params_of_b = get_tps_parameters(landmarks_b, landmarks_a)
 
     # Warp the patch
-    print(f"landmarks_to:{landmarks_a}")
-    warped_b = warp_patch(landmarks_b, warped_params_of_b, frame, rect_a)
+    #print(f"landmarks_to:{landmarks_a}")
+    print(f"rect_a:{rect_a}")
+    print(f"rect_b:{rect_b}")
+    warped_b = warp_patch(landmarks_b, warped_params_of_b, frame, rect_b)
 
     # Get (x, y) for a
     # Construct img using (x, y)
