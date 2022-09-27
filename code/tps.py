@@ -106,7 +106,7 @@ def warp_patch(landmarks_from : List[Tuple],
     coords_to = coords_to.astype(int)
 
     """
-    problems
+    problems TODO
     1: coords_to maynot be an integer
         bilinear interploation? -- scipy.interpolate.interp2d
 
@@ -185,6 +185,9 @@ def main(args):
     2. changing lambda is affecting the output a lot, so probably have to plot
         function outputs against that to check if they make sense
             currently 1e-3 looks stable
+
+    3. maybe the landmarks are not mapping one to one correctly, giving us a weird fit
+        plot the landmarks like how the fiducials are plotted
     """
     warped_b = warp_patch(landmarks_b, warped_params_of_b, frame, rect_b)
 
