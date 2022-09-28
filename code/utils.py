@@ -175,6 +175,19 @@ def dlib_rect_to_bbox_coords(rect):
             [rect.right(),rect.bottom()],
             [rect.right(),rect.top()]])
 
+def get_centers_of_rect_sides(rect):
+    center_x = (rect.left() + rect.right())/2
+    center_y = (rect.top() + rect.bottom())/2
+
+    return np.array(
+        [
+            [rect.left(), center_y],
+            [center_x, rect.bottom()],
+            [rect.right(), center_y],
+            [center_x, rect.top()]
+        ]
+    )
+
 def get_colors(n):
     random.seed(45) 
     color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))

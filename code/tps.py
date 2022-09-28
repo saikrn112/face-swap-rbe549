@@ -14,6 +14,20 @@ def append_zeros_to_landmarks(landmarks: List[Tuple]) -> List[Tuple]:
     ret = np.concatenate((landmarks,np.zeros((3,2))),axis=0)
     return ret
 
+def append_rect_coords_to_landmarks(landmarks: List[Tuple], rect: Any) -> List[Tuple]:
+    """
+    TBF
+    """
+    # appending rectangle boundaries as landmarks
+    rect_bb_coords = dlib_rect_to_bbox_coords(rect)
+
+    # appending centres of bounding rect as landmarks
+    rect_side_centers = get_centers_of_rect_sides(rect)
+
+    return np.concatenate(
+        (landmarks, rect_bb_coords, rect_side_centers), axis=0
+    )
+
 def homogenize_coords(coords: List[Tuple]) -> List[Tuple]:
     """
     nx2 -> nx3
@@ -27,13 +41,17 @@ def get_k_matrix(landmarks: List[Tuple],coords: List[Tuple]) -> List[List]:
     coords - mx2
     output k matrix - mxn
     """
-    k = np.zeros(shape=(len(coords), len(landmarks)))
     coords_x, landmarks_x = np.meshgrid(landmarks[:,0],coords[:,0])
     coords_y, landmarks_y = np.meshgrid(landmarks[:,1],coords[:,1])
 
-    norm = abs(landmarks_y - coords_y) + abs(landmarks_x - coords_x)
-    norm_sq = norm**2
-    K = norm_sq*np.log(norm_sq + 1e-6)
+    # rbf_log
+    # norm = abs(landmarks_y - coords_y) + abs(landmarks_x - coords_x)
+    # norm_sq = norm**2
+    # K = norm_sq*np.log10(norm_sq + 1e-6)
+
+    # rbf_gaussian
+    norm = abs(landmarks_y - coords_y)**2 + abs(landmarks_x - coords_x)**2
+    K = np.exp(-norm/100)
     return K
 
 def get_tps_matrix(landmarks: List[Tuple], coords: List[Tuple], compute_coords: bool) -> List[List[int]]:
@@ -72,7 +90,7 @@ def get_tps_parameters( landmarks_from: List[Tuple],
     return params
 
 
-def warp_patch(landmarks_from : List[Tuple], 
+def warp_patch(landmarks_from : List[Tuple],
                parameters     : List[Tuple], 
                frame          : List[List[Tuple]],
                patch_rect_to  : Any):
@@ -83,54 +101,27 @@ def warp_patch(landmarks_from : List[Tuple],
     patch_rect_to   - 4x2
     """
 
-    x_values = np.arange(patch_rect_to.left(), patch_rect_to.right()+1, 1)
-    y_values = np.arange(patch_rect_to.top(), patch_rect_to.bottom()+1, 1)
+    # Filter coords from patch that lie within the convex hull of landmarks
+    mask = np.zeros((frame.shape[0], frame.shape[1]))
+    landmarks_from_raw = landmarks_from[:-8].astype(np.int32)
+    hull_points_to = cv2.convexHull(landmarks_from_raw, returnPoints=True)
+    mask = cv2.fillConvexPoly(mask, hull_points_to, 1)
+    indices_from = np.argwhere(mask==1)
 
-    x, y = np.meshgrid(x_values,y_values)
-    coords_from = np.array([x.flatten(),y.flatten()]).T
-    #coords_from = landmarks_from[20:50,:]
-    print(f"coords_from_shape:{coords_from.shape}")
-    coords_from_orig = coords_from
-    coords_from = coords_from_orig[0:6000,:]
-    coords_from = np.concatenate((coords_from,coords_from_orig[10000:11000,:]),axis=0)
+    # Convert indices to coords because cv functions above changed the type
+    coords_from = np.vstack((indices_from[:,1], indices_from[:,0])).T
 
     tps_mat = get_tps_matrix(landmarks_from,coords_from, True) # mxn
-    #print(f"rect_to:{patch_rect_to}")
-    #print(f"tps_mat:{tps_mat.shape}")
-    #print(f"parameters_shape:{parameters.shape}")
-    #print(f"parameters:{parameters}")
-
     coords_to = tps_mat @ parameters
-    #print(f"coords_from:{coords_from}")
-    #print(f"coords_to:{coords_to}")
     coords_to = coords_to.astype(int)
-
-    """
-    problems TODO
-    1: coords_to maynot be an integer
-        bilinear interploation? -- scipy.interpolate.interp2d
-
-    2: patch shapes are not same, so coords from B might not map within image A
-        should we add boundaries as control points - we did, might need to add
-            more points on the boundary
-    """
 
     warped_patch_shape = dlib_rect_to_shape(patch_rect_to)
     warped_patch = np.zeros(shape=(warped_patch_shape[0],warped_patch_shape[1],3))
-    #print(f"landmarks_from:{landmarks_from}")
-    print(f"warped_patch_shape:{warped_patch.shape}")
 
     frame_copy = frame.copy()
-    print(f"max_i:{np.max(coords_to[:,1])}")
-    #frame[coords_to[:,1],coords_to[:,0],:]
-#    for i,coord_i in enumerate(coords_to[:,1]):
-#        for j,coord_j in enumerate(coords_to[:,0]):
-#            if coord_i < 0 or coord_i >= 400 or coord_j < 0 or coord_j >= 550:
-#                continue
-#            frame_copy[coords_from[i,1],coords_from[j,:0]] = frame[coord_i,coord_j]
     frame_copy[coords_from[:,1],coords_from[:,0],:] = frame[coords_to[:,1],coords_to[:,0],:]
 
-    cv2.imshow("warped_frame",frame_copy)
+    cv2.imshow("warped_frame", frame_copy)
 
     return frame_copy
     
@@ -148,7 +139,6 @@ def main(args):
     print(frame.shape)
     frame = cv2.resize(frame ,(550,400))
     print(frame.shape)
-    frame_gray = cv2.cvtColor(frame , cv2.COLOR_BGR2GRAY)
 
     # each frame has two faces that needs to be swapped
     rects = detector(frame, 0)
@@ -159,42 +149,16 @@ def main(args):
     landmarks_a = get_fiducial_landmarks(predictor,frame,rect_a,args,"a")
     landmarks_b = get_fiducial_landmarks(predictor,frame,rect_b,args,"b")
 
-    # appending rectangle boundaries as landmarks
-    rect_bb_coords_a = dlib_rect_to_bbox_coords(rect_a)
-    rect_bb_coords_b = dlib_rect_to_bbox_coords(rect_b)
-    landmarks_a = np.concatenate((landmarks_a,rect_bb_coords_a),axis=0)
-    landmarks_b = np.concatenate((landmarks_b,rect_bb_coords_b),axis=0)
+    # Append rect corner and center coords as additional landmarks
+    landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
+    landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
 
     # Get tps parameters for image
     warped_params_of_b = get_tps_parameters(landmarks_b, landmarks_a)
 
     # Warp the patch
-    #print(f"landmarks_to:{landmarks_a}")
-    print(f"rect_a:{rect_a}")
-    print(f"rect_b:{rect_b}")
-    """
-    problems TODO
-    1. even though landmarks are mapping correctly, rest of the indices are not
-        in fact, they are going negative and out of bounds of image dimensions
-        which doesnt make sense
-            - can add rectangle's middle points for better warping?
-            - plot how f_x and f_y mapping is changing w.r.t to x,y
-                to get better idea of the fit
-                maybe the RBF that's used is not a good fit?
-
-    2. changing lambda is affecting the output a lot, so probably have to plot
-        function outputs against that to check if they make sense
-            currently 1e-3 looks stable
-
-    3. maybe the landmarks are not mapping one to one correctly, giving us a weird fit
-        plot the landmarks like how the fiducials are plotted
-    """
     warped_b = warp_patch(landmarks_b, warped_params_of_b, frame, rect_b)
 
-    # Get (x, y) for a
-    # Construct img using (x, y)
-    # Get inverse warpings for both crops
-    # Put warped crops on original image/frame
     # Display
     if args.display:
         cv2.waitKey(0)

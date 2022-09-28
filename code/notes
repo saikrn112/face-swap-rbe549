@@ -10,3 +10,34 @@ problems
         why vertices are not satisfying inverted barycentric coords
             as a workaround, use shapely and check if point is in triangle
         change dst_shape coords reference to image_coords
+
+TODOs
+1: coords_to maynot be an integer
+   bilinear interploation? -- scipy.interpolate.interp2d
+
+2: patch shapes are not same, so coords from B might not map within image A
+   should we add boundaries as control points - we did, might need to add more
+   points on the boundary
+
+
+TODOs
+1. even though landmarks are mapping correctly, rest of the indices are not
+   in fact, they are going negative and out of bounds of image dimensions which
+   doesnt make sense
+   - can add rectangle's middle points for better warping?
+   - plot how f_x and f_y mapping is changing w.r.t to x,y to get better idea of
+    the fit
+   - maybe the RBF that's used is not a good fit?
+
+2. changing lambda is affecting the output a lot, so probably have to plot
+   function outputs against that to check if they make sense, currently 1e-3
+   looks stable
+
+3. Maybe the landmarks are not mapping one to one correctly, giving a weird fit
+    plot the landmarks like how the fiducials are plotted
+
+
+TODOs (as of 28/9/22):
+1. Warping for both faces in the same image
+2. Warping on a video
+3. Blending
