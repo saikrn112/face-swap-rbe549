@@ -10,8 +10,8 @@ def get_delaunay_triangulation(rect: List[Tuple],
                                 args,
                                 image_color,
                                 window_name) -> List[List[int]]:
-    landmarks_subdiv = cv2.Subdiv2D(rect)
-    landmarks_subdiv.insert(landmarks.astype(int).tolist())
+    landmarks_subdiv = cv2.Subdiv2D(dlib_rect_to_tuple(rect))
+    landmarks_subdiv.insert(landmarks.tolist())
     triangles_list = landmarks_subdiv.getTriangleList()
 
     # Show triangulation
@@ -21,10 +21,12 @@ def get_delaunay_triangulation(rect: List[Tuple],
             draw_voronoi(image_color,landmarks_subdiv,window_name)
     return triangles_list
 
-def get_triangulation_for_src(dst_triangulation: List[List[int]], src_fiducials: List[Tuple], dst_fiducials, 
-                                args,
-                                image_color,
-                                window_name) -> List[List[int]]:
+def get_triangulation_for_src(dst_triangulation: List[List[int]],
+                              src_fiducials: List[Tuple],
+                              dst_fiducials: List[Tuple],
+                              args,
+                              image_color,
+                              window_name) -> List[List[int]]:
     """
     We are getting src_triangulation from dst_triangulation
     dst_triangulation: mx6
@@ -39,10 +41,18 @@ def get_triangulation_for_src(dst_triangulation: List[List[int]], src_fiducials:
         coords1_idx = fidu_coord_to_idx[(triangle[0], triangle[1])]
         coords2_idx = fidu_coord_to_idx[(triangle[2], triangle[3])]
         coords3_idx = fidu_coord_to_idx[(triangle[4], triangle[5])]
-
+        if coords1_idx == coords2_idx or \
+                coords2_idx == coords3_idx or \
+                coords1_idx == coords3_idx:
+            print(coords1_idx)
+            print(coords2_idx)
+            print(coords3_idx)
+            exit(1)
         src_triangulation.append(
             [
-                *dst_fiducials[coords1_idx], *dst_fiducials[coords2_idx], *dst_fiducials[coords3_idx]
+                *dst_fiducials[coords1_idx],
+                *dst_fiducials[coords2_idx],
+                *dst_fiducials[coords3_idx]
             ]
         )
 
@@ -62,7 +72,12 @@ def get_barycentric_matrix(tri_coords: List[int], get_inv: bool=False) -> List[L
     mat = np.concatenate([mat, np.ones((3, 1))], axis=1).T
 
     if get_inv:
-        return np.linalg.inv(mat)
+        try:
+            inv = np.linalg.inv(mat)
+            return inv
+        except:
+            print("singular:", tri_coords)
+            exit(1)
     return mat
 
 
@@ -98,7 +113,7 @@ def get_image_inverse_warping( src_img: List[List],
 
 
     # Get a grid
-    dst_shape = dlib_rect_to_img_shape(dst_rect_dlib)
+    dst_shape = dlib_rect_to_shape(dst_rect_dlib)
     warped_src = np.zeros((dst_shape[0],dst_shape[1],3))
 
     start_x = dst_rect_dlib.left()
@@ -122,7 +137,6 @@ def get_image_inverse_warping( src_img: List[List],
                 print(barycentric_coord)
                 # Get loc in src from barycentric_matrix and barycentric coordinate
                 src_loc = src_bary_matrices[j] @ barycentric_coord
-
                 
                 # Unhomogenize loc -> (x, y)
                 x, y = int(src_loc[0]/src_loc[2]),int(src_loc[1]/src_loc[2])
@@ -134,46 +148,49 @@ def get_image_inverse_warping( src_img: List[List],
 def main(args):
     display = args.display
     debug = args.debug
-    # Read image/s
-    jenny_color = cv2.imread("../data/selfie_4.jpeg")
-    print(jenny_color.shape)
-    jenny_color = cv2.resize(jenny_color,(550,400))
-    print(jenny_color.shape)
-    jenny_gray = cv2.cvtColor(jenny_color, cv2.COLOR_BGR2GRAY)
-    #chrissy_color = cv2.imread("../data/chrissy.jpg")
-    #chrissy_gray = cv2.cvtColor(chrissy_color, cv2.COLOR_BGR2GRAY)
     predictor_model = "../data/shape_predictor_68_face_landmarks.dat"
 
     # Initialize frontal face detector and shape predictor:
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor(predictor_model)
 
-    # assuming 2 different images 
-    # each image has single face that needs to be swapped
-    rects = detector(jenny_color, 0)
-    rect_jenny = rects[0]
-    rect_chrissy = rects[1]
+    # Read image/s
+    frame = cv2.imread("../data/selfie_2.jpeg")
+    frame = cv2.resize(frame,(550,400))
 
-    rect_jenny_tuple = dlib_fiducials_to_tuple(rect_jenny)
-    rect_chrissy_tuple = dlib_fiducials_to_tuple(rect_chrissy)
+    # Each frame has two faces that need to be swapped
+    rects = detector(frame, 0)
+    rect_a = rects[0]
+    rect_b = rects[1]
 
     # Get facial landmarks
-    jenny_fiducials = get_fiducial_landmarks(predictor,jenny_color,rect_jenny,args,"ramana")
-    chrissy_fiducials = get_fiducial_landmarks(predictor,jenny_color,rect_chrissy,args,"radha")
+    landmarks_a = get_fiducial_landmarks(predictor, frame, rect_a, args, 'a')
 
-    # Get delaunay triangulation (TODO Check if order of triangle vertices is consistent for both)
-    jenny_triangle_list = get_delaunay_triangulation(rect_jenny_tuple,jenny_fiducials,args,jenny_color,"ramana")
-    chrissy_triangle_list = get_triangulation_for_src(jenny_triangle_list, jenny_fiducials, chrissy_fiducials, args, jenny_color, "radha")
-    # chrissy_triangle_list = get_delaunay_triangulation(rect_chrissy_tuple, chrissy_fiducials,args,jenny_color,"radha")
+    # Remove fiducials that are causing inv to be singular
+    list_a = set([])
+    for idx, landmark in enumerate(landmarks_a):
+        if tuple(landmark.tolist()) in list_a:
+            print(f"index of non-unique landmark a {idx}, {landmark}")
+        list_a.add(tuple(landmark.tolist()))
+
+    landmarks_b = get_fiducial_landmarks(predictor, frame, rect_b, args, 'b')
+
+    # Remove fiducials that are causing inv to be singular
+    list_b = set([])
+    for idx, landmark in enumerate(landmarks_b):
+        if tuple(landmark.tolist()) in list_b:
+            print(f"index of non-unique landmark b {idx}, {landmark}")
+        list_b.add(tuple(landmark.tolist()))
+
+    # Get delaunay triangulation
+    triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")
+    triangle_list_b = get_triangulation_for_src(triangle_list_a, landmarks_a, landmarks_b, args, frame, "b")
 
     if args.display:
         cv2.waitKey(0)
     
     # Get inverse warpings for both crops
-    get_image_inverse_warping(jenny_color, rect_jenny, jenny_triangle_list, chrissy_triangle_list, args)
-    
-    # Put warped crops on original image/frame
-    # Display
+    get_image_inverse_warping(frame, rect_a, triangle_list_a, triangle_list_b, args)
 
 
 if __name__ == '__main__':
