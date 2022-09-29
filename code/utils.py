@@ -2,6 +2,16 @@ import numpy as np
 import cv2
 import dlib
 import random
+from typing import List, Tuple
+
+def get_fiducial_landmarks(predictor,image: List[List], rect: List[Tuple], args, window_name) -> List[Tuple]:
+    # get Fiducials
+    fiducials_objects = predictor(image, rect)
+
+    fiducials = shape_to_np(fiducials_objects)
+    print(f"fiducials_shape:{fiducials.shape}")
+
+    return fiducials
 
 # Define what landmarks you want:
 JAWLINE_POINTS = list(range(0, 17))
@@ -73,22 +83,23 @@ def draw_shape_points(np_shape, image_orig):
     for (x, y) in np_shape:
         cv2.circle(image, (x, y), 2, (0, 255, 0), -1)
 
-def draw_fiducials(fiducials, img_orig, window_name):
-    image = img_orig.copy()
-    #Draw all lines connecting the different face parts:
-    draw_shape_lines_all(fiducials, image)
+def draw_fiducials(fiducials_list, image, window_name):
+    for fiducials in fiducials_list:
+        #Draw all lines connecting the different face parts:
+        draw_shape_lines_all(fiducials, image)
 
-    # Draw jaw line:
-    #draw_shape_lines_range(fiducials, image, JAWLINE_POINTS)
+        # Draw jaw line:
+        #draw_shape_lines_range(fiducials, image, JAWLINE_POINTS)
 
-    # Draw all points and their position:
-    draw_shape_points_pos(fiducials, image)
-    # You can also use:
-    #draw_shape_points_pos_range(fiducials, image, ALL_POINTS)
+        # Draw all points and their position:
+        draw_shape_points_pos(fiducials, image)
+        # You can also use:
+        #draw_shape_points_pos_range(fiducials, image, ALL_POINTS)
 
-    # Draw all shape points:
-    draw_shape_points(fiducials, image)
-    # Confirm no. of points for different faces are same
+        # Draw all shape points:
+        draw_shape_points(fiducials, image)
+        # Confirm no. of points for different faces are same
+
     cv2.imshow(f"{window_name}_fiducials",image)
 
 # Check if a point is inside a rectangle
@@ -147,11 +158,30 @@ def draw_voronoi(img_orig, subdiv,window_name_prefix) :
 
     cv2.imshow(f"{window_name_prefix}_voronoi",img)
 
-def dlib_fiducials_to_tuple(fiducials):
-    return (fiducials.left(),fiducials.top(),fiducials.right(),fiducials.bottom())
+def dlib_rect_to_tuple(rect):
+    return (rect.left(),rect.top(),rect.right(),rect.bottom())
 
-def dlib_rect_to_img_shape(rect):
+def dlib_rect_to_shape(rect):
     return [rect.bottom() - rect.top(), rect.right() - rect.left()]
+
+def dlib_rect_to_bbox_coords(rect):
+    return np.array([[rect.left(),rect.top()],
+            [rect.left(),rect.bottom()],
+            [rect.right(),rect.bottom()],
+            [rect.right(),rect.top()]])
+
+def get_centers_of_rect_sides(rect):
+    center_x = (rect.left() + rect.right())/2
+    center_y = (rect.top() + rect.bottom())/2
+
+    return np.array(
+        [
+            [rect.left(), center_y],
+            [center_x, rect.bottom()],
+            [rect.right(), center_y],
+            [center_x, rect.top()]
+        ]
+    )
 
 def get_colors(n):
     random.seed(45) 

@@ -5,22 +5,6 @@ from typing import List, Tuple, Any
 from utils import *
 import argparse
 
-def get_fiducial_landmarks(predictor,image: List[List], rect: List[Tuple], args, window_name) -> List[Tuple]:
-    # get Fiducials
-    fiducials_objects = predictor(image, rect)
-
-    fiducials = shape_to_np(fiducials_objects)
-    print(fiducials.shape)
-
-    if args.display:
-        draw_fiducials(fiducials, image, window_name)
-
-    # TODO better soln
-    #fiducials = np.delete(fiducials,[17,26],axis=0)
-    print(f"after removing: {fiducials.shape}")
-
-    return fiducials
-
 def get_delaunay_triangulation(rect: List[Tuple],
                                 landmarks: List[Tuple],
                                 args,
@@ -141,7 +125,7 @@ def get_image_inverse_warping( src_img: List[List],
 
                 
                 # Unhomogenize loc -> (x, y)
-                x, y =int(src_loc[0]/src_loc[2]),int(src_loc[1]/src_loc[2])
+                x, y = int(src_loc[0]/src_loc[2]),int(src_loc[1]/src_loc[2])
                 print(f"x:{x} y:{y}")
 
                 warped_src[y, x, :] = src_img[x, y, :]
@@ -172,8 +156,6 @@ def main(args):
 
     rect_jenny_tuple = dlib_fiducials_to_tuple(rect_jenny)
     rect_chrissy_tuple = dlib_fiducials_to_tuple(rect_chrissy)
-    #rect_jenny = detector(jenny_color , 0)[0]
-    #rect_chrissy = detector(chrissy_color , 0)[0]
 
     # Get facial landmarks
     jenny_fiducials = get_fiducial_landmarks(predictor,jenny_color,rect_jenny,args,"ramana")
