@@ -139,7 +139,7 @@ def get_image_inverse_warping( frame: List[List],
                 # Unhomogenize loc -> (x, y)
                 x, y = int(src_loc[0]/src_loc[2]),int(src_loc[1]/src_loc[2])
 
-                frame_copy[y, x, :] = frame[x, y, :]
+                frame_copy[int(pt[1]), int(pt[0]), :] = frame[y, x, :]
     return frame_copy 
 
 def main(args):
@@ -152,7 +152,7 @@ def main(args):
     predictor = dlib.shape_predictor(predictor_model)
 
     # Read image/s
-    frame = cv2.imread("../data/selfie_2.jpeg")
+    frame = cv2.imread("../data/selfie_3.jpeg")
     frame = cv2.resize(frame,(550,400))
 
     # Each frame has two faces that need to be swapped
