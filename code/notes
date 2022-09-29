@@ -36,8 +36,8 @@ TODOs
 3. Maybe the landmarks are not mapping one to one correctly, giving a weird fit
     plot the landmarks like how the fiducials are plotted
 
-
 TODOs (as of 28/9/22):
-1. Warping for both faces in the same image
-2. Warping on a video
-3. Blending
+- [*] Warping for both faces in the same image
+- []  Warping on a video
+- [] Blending
+- [] different NORM in RBF ? 

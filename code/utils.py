@@ -11,12 +11,6 @@ def get_fiducial_landmarks(predictor,image: List[List], rect: List[Tuple], args,
     fiducials = shape_to_np(fiducials_objects)
     print(f"fiducials_shape:{fiducials.shape}")
 
-    if args.display:
-        draw_fiducials(fiducials, image, window_name)
-
-    # TODO better soln
-    #fiducials = np.delete(fiducials,[17,26],axis=0)
-
     return fiducials
 
 # Define what landmarks you want:
@@ -89,22 +83,23 @@ def draw_shape_points(np_shape, image_orig):
     for (x, y) in np_shape:
         cv2.circle(image, (x, y), 2, (0, 255, 0), -1)
 
-def draw_fiducials(fiducials, img_orig, window_name):
-    image = img_orig.copy()
-    #Draw all lines connecting the different face parts:
-    draw_shape_lines_all(fiducials, image)
+def draw_fiducials(fiducials_list, image, window_name):
+    for fiducials in fiducials_list:
+        #Draw all lines connecting the different face parts:
+        draw_shape_lines_all(fiducials, image)
 
-    # Draw jaw line:
-    #draw_shape_lines_range(fiducials, image, JAWLINE_POINTS)
+        # Draw jaw line:
+        #draw_shape_lines_range(fiducials, image, JAWLINE_POINTS)
 
-    # Draw all points and their position:
-    draw_shape_points_pos(fiducials, image)
-    # You can also use:
-    #draw_shape_points_pos_range(fiducials, image, ALL_POINTS)
+        # Draw all points and their position:
+        draw_shape_points_pos(fiducials, image)
+        # You can also use:
+        #draw_shape_points_pos_range(fiducials, image, ALL_POINTS)
 
-    # Draw all shape points:
-    draw_shape_points(fiducials, image)
-    # Confirm no. of points for different faces are same
+        # Draw all shape points:
+        draw_shape_points(fiducials, image)
+        # Confirm no. of points for different faces are same
+
     cv2.imshow(f"{window_name}_fiducials",image)
 
 # Check if a point is inside a rectangle

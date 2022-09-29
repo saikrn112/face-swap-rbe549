@@ -93,6 +93,7 @@ def get_tps_parameters( landmarks_from: List[Tuple],
 def warp_patch(landmarks_from : List[Tuple],
                parameters     : List[Tuple], 
                frame          : List[List[Tuple]],
+               canvas         : List[List[Tuple]],
                patch_rect_to  : Any):
     """
     landmarks_from  - nx2
@@ -118,12 +119,9 @@ def warp_patch(landmarks_from : List[Tuple],
     warped_patch_shape = dlib_rect_to_shape(patch_rect_to)
     warped_patch = np.zeros(shape=(warped_patch_shape[0],warped_patch_shape[1],3))
 
-    frame_copy = frame.copy()
-    frame_copy[coords_from[:,1],coords_from[:,0],:] = frame[coords_to[:,1],coords_to[:,0],:]
+    canvas[coords_from[:,1],coords_from[:,0],:] = frame[coords_to[:,1],coords_to[:,0],:]
 
-    cv2.imshow("warped_frame", frame_copy)
-
-    return frame_copy
+    return canvas
     
 def main(args):
     display = args.display
@@ -149,15 +147,26 @@ def main(args):
     landmarks_a = get_fiducial_landmarks(predictor,frame,rect_a,args,"a")
     landmarks_b = get_fiducial_landmarks(predictor,frame,rect_b,args,"b")
 
+    if args.display:
+        img_fiducials = frame.copy()
+        draw_fiducials([landmarks_a,landmarks_b],img_fiducials,"ab")
+
     # Append rect corner and center coords as additional landmarks
     landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
     landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
 
     # Get tps parameters for image
     warped_params_of_b = get_tps_parameters(landmarks_b, landmarks_a)
+    warped_params_of_a = get_tps_parameters(landmarks_a, landmarks_b)
 
     # Warp the patch
-    warped_b = warp_patch(landmarks_b, warped_params_of_b, frame, rect_b)
+    canvas = frame.copy() # frame on which it has warp
+    warped_b = warp_patch(landmarks_b, warped_params_of_b, frame, canvas, rect_b)
+    warped_a = warp_patch(landmarks_a, warped_params_of_a, frame, canvas, rect_a)
+
+    if args.display:
+        cv2.imshow("frame",frame)
+        cv2.imshow("warped_frame",canvas)
 
     # Display
     if args.display:
