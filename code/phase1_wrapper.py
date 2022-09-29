@@ -41,13 +41,7 @@ def get_triangulation_for_src(dst_triangulation: List[List[int]],
         coords1_idx = fidu_coord_to_idx[(triangle[0], triangle[1])]
         coords2_idx = fidu_coord_to_idx[(triangle[2], triangle[3])]
         coords3_idx = fidu_coord_to_idx[(triangle[4], triangle[5])]
-        if coords1_idx == coords2_idx or \
-                coords2_idx == coords3_idx or \
-                coords1_idx == coords3_idx:
-            print(coords1_idx)
-            print(coords2_idx)
-            print(coords3_idx)
-            exit(1)
+
         src_triangulation.append(
             [
                 *dst_fiducials[coords1_idx],
@@ -91,16 +85,19 @@ def point_within_triangle(point: Tuple, dst_inv: List[List]) -> List[Any]:
 
     if ((0 <= bary_coords) & (bary_coords <= 1)).all() \
         and (0 < np.sum(bary_coords,axis=0) <= 1):
-        print(bary_coords)
         return True,bary_coords
     return False,None
 
-def get_image_inverse_warping( src_img: List[List], 
+def get_image_inverse_warping( frame: List[List], 
                             dst_rect_dlib: Any,
                             src_triangles:  List[List[int]], 
                             dst_triangles: List[List[int]], 
                             args) -> List[List]:
 
+    """
+    we are replacing dst intensities from src intensities
+    for that we are first inverse warping the dst coords to src
+    """
     # Get barycentric_matrix for src_triangles
     src_bary_matrices = [get_barycentric_matrix(src_tri) for src_tri in src_triangles]
     if args.debug:
@@ -111,39 +108,39 @@ def get_image_inverse_warping( src_img: List[List],
     if args.debug:
         print(f"dst_inv: {dst_bary_inverses}")
 
-
     # Get a grid
-    dst_shape = dlib_rect_to_shape(dst_rect_dlib)
-    warped_src = np.zeros((dst_shape[0],dst_shape[1],3))
-
     start_x = dst_rect_dlib.left()
     end_x = dst_rect_dlib.right()
     start_y = dst_rect_dlib.top()
     end_y = dst_rect_dlib.bottom()
 
-    xs = np.arange(start_x, end_x, 1).astype(int)
-    ys = np.arange(start_y, end_y, 1).astype(int)
+    xs = np.arange(start_x, end_x+1, 1).astype(int)
+    ys = np.arange(start_y, end_y+1, 1).astype(int)
 
     grid_xs, grid_ys = np.meshgrid(xs, ys)
     grid_xs = np.array([grid_xs.flatten()])
     grid_ys = np.array([grid_ys.flatten()])
 
-    coords = np.concatenate((grid_xs, grid_ys, np.ones((1,dst_shape[0]*dst_shape[1]))), axis=0).T
+    coords = np.concatenate((grid_xs, grid_ys), axis=0).T
+
+    frame_copy = frame.copy()
+#    frame_copy[coords[:,1],coords[:,0]] = (255,255,255)
+#    cv2.imshow("white",frame_copy)
+
+    coords = homogenize_coords(coords)
 
     for pt in coords:
         for j, dst_bary_inv in enumerate(dst_bary_inverses):
             in_triangle, barycentric_coord = point_within_triangle(pt, dst_bary_inv)
             if in_triangle:
-                print(barycentric_coord)
                 # Get loc in src from barycentric_matrix and barycentric coordinate
                 src_loc = src_bary_matrices[j] @ barycentric_coord
                 
                 # Unhomogenize loc -> (x, y)
                 x, y = int(src_loc[0]/src_loc[2]),int(src_loc[1]/src_loc[2])
-                print(f"x:{x} y:{y}")
 
-                warped_src[y, x, :] = src_img[x, y, :]
-    return warped_src
+                frame_copy[y, x, :] = frame[x, y, :]
+    return frame_copy 
 
 def main(args):
     display = args.display
@@ -167,35 +164,47 @@ def main(args):
     landmarks_a = get_fiducial_landmarks(predictor, frame, rect_a, args, 'a')
 
     # Remove fiducials that are causing inv to be singular
+    exclude_landmarks = set()
     list_a = set([])
     for idx, landmark in enumerate(landmarks_a):
         if tuple(landmark.tolist()) in list_a:
+            exclude_landmarks.add(idx)
             print(f"index of non-unique landmark a {idx}, {landmark}")
         list_a.add(tuple(landmark.tolist()))
 
     landmarks_b = get_fiducial_landmarks(predictor, frame, rect_b, args, 'b')
 
-    # Remove fiducials that are causing inv to be singular
     list_b = set([])
     for idx, landmark in enumerate(landmarks_b):
         if tuple(landmark.tolist()) in list_b:
+            exclude_landmarks.add(idx)
             print(f"index of non-unique landmark b {idx}, {landmark}")
         list_b.add(tuple(landmark.tolist()))
+
+    # Remove fiducials that are causing inv to be singular
+    landmarks_a = np.delete(landmarks_a,list(exclude_landmarks),axis=0)
+    landmarks_b = np.delete(landmarks_b,list(exclude_landmarks),axis=0)
+    print(landmarks_a.shape)
+    print(landmarks_b.shape)
 
     # Get delaunay triangulation
     triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")
     triangle_list_b = get_triangulation_for_src(triangle_list_a, landmarks_a, landmarks_b, args, frame, "b")
 
+    # Get inverse warpings for both crops
+    warp_img = get_image_inverse_warping(frame, rect_b, triangle_list_a, triangle_list_b, args)
+    
+    if args.display:
+        cv2.imshow("warp_img",warp_img)
+
     if args.display:
         cv2.waitKey(0)
     
-    # Get inverse warpings for both crops
-    get_image_inverse_warping(frame, rect_a, triangle_list_a, triangle_list_b, args)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--display',default=False,help="to display images")
-    parser.add_argument('--debug',default=False,help="to display images")
+    parser.add_argument('--display',action='store_true',help="to display images")
+    parser.add_argument('--debug',action='store_true',help="to display images")
     args = parser.parse_args()
     main(args)
