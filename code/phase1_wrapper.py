@@ -4,6 +4,7 @@ import dlib
 from typing import List, Tuple, Any
 from utils import *
 import argparse
+from shapely.geometry import Point, Polygon
 
 def get_delaunay_triangulation(rect: List[Tuple],
                                 landmarks: List[Tuple],
@@ -74,6 +75,14 @@ def get_barycentric_matrix(tri_coords: List[int], get_inv: bool=False) -> List[L
             exit(1)
     return mat
 
+def check_point_in_triangle(point):
+    """
+    point - 1 X 3
+    """
+    if ((0 <= point) & (point <= 1)).all() \
+            and (0 < np.sum(point) <= 1):
+        return True
+    return False
 
 def point_within_triangle(point: Tuple, dst_inv: List[List]) -> List[Any]:
     """
@@ -85,8 +94,25 @@ def point_within_triangle(point: Tuple, dst_inv: List[List]) -> List[Any]:
 
     if ((0 <= bary_coords) & (bary_coords <= 1)).all() \
         and (0 < np.sum(bary_coords,axis=0) <= 1):
-        return True,bary_coords
+        return True, bary_coords
+
     return False,None
+
+def point_within_triangle1(point: Tuple, dst_inv: List[List], polygon) -> List[Any]:
+
+    cond = polygon.contains(Point(point[0], point[1]))
+    if cond:
+        point = np.array([point]).T
+        # print(f"point{point}")
+        bary_coords = dst_inv @ point
+        return True, bary_coords
+
+    return False, None
+
+def construct_polygon(triangle):
+    triangle = np.reshape(triangle, (3,2))
+    polygon = Polygon(map(Point,triangle))
+    return polygon
 
 def get_image_inverse_warping( frame: List[List], 
                             dst_rect_dlib: Any,
@@ -105,6 +131,7 @@ def get_image_inverse_warping( frame: List[List],
 
     # Get inverse of barycentric_matrix for dst_triangles
     dst_bary_inverses = [get_barycentric_matrix(dst_tri, True) for dst_tri in dst_triangles]
+    dst_polygons = [construct_polygon(dst_tri) for dst_tri in dst_triangles]
     if args.debug:
         print(f"dst_inv: {dst_bary_inverses}")
 
@@ -128,18 +155,34 @@ def get_image_inverse_warping( frame: List[List],
 #    cv2.imshow("white",frame_copy)
 
     coords = homogenize_coords(coords)
+    print(len(dst_bary_inverses))
+    for j, dst_bary_inv in enumerate(dst_bary_inverses):
+        bary_coords = dst_bary_inv @ coords.T
+        coords_within = np.apply_along_axis(check_point_in_triangle,axis=0,arr=bary_coords)
+        within_indxs = np.argwhere(coords_within==True).flatten().tolist()
+        filtered_coords = coords.T[:,within_indxs].astype(int)
+        # Get loc in src from barycentric_matrix and barycentric coordinate
+        src_loc = src_bary_matrices[j] @ bary_coords[:,within_indxs]
 
-    for pt in coords:
-        for j, dst_bary_inv in enumerate(dst_bary_inverses):
-            in_triangle, barycentric_coord = point_within_triangle(pt, dst_bary_inv)
-            if in_triangle:
-                # Get loc in src from barycentric_matrix and barycentric coordinate
-                src_loc = src_bary_matrices[j] @ barycentric_coord
-                
-                # Unhomogenize loc -> (x, y)
-                x, y = int(src_loc[0]/src_loc[2]),int(src_loc[1]/src_loc[2])
+        # Unhomogenize loc -> (x, y)
+        x = (src_loc[0,:] / src_loc[2,:]).astype(int)
+        y = (src_loc[1, :] / src_loc[2, :]).astype(int)
+        # x, y = int(src_loc[0,:] / src_loc[2,:]), int(src_loc[1,:] / src_loc[2,:])
 
-                frame_copy[int(pt[1]), int(pt[0]), :] = frame[y, x, :]
+        frame_copy[filtered_coords[1,:], filtered_coords[0,:], :] = frame[y, x, :]
+
+    # for pt in coords:
+    #     for j, dst_bary_inv in enumerate(dst_bary_inverses):
+    #         # in_triangle, barycentric_coord = point_within_triangle1(pt, dst_bary_inv, dst_polygons[j])
+    #         in_triangle, barycentric_coord = point_within_triangle(pt, dst_bary_inv)
+    #         if in_triangle:
+    #             # Get loc in src from barycentric_matrix and barycentric coordinate
+    #             src_loc = src_bary_matrices[j] @ barycentric_coord
+    #
+    #             # Unhomogenize loc -> (x, y)
+    #             x, y = int(src_loc[0]/src_loc[2]),int(src_loc[1]/src_loc[2])
+    #
+    #             frame_copy[int(pt[1]), int(pt[0]), :] = frame[y, x, :]
     return frame_copy 
 
 def main(args):
