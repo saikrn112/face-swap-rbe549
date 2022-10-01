@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import dlib
 import random
-from typing import List, Tuple
+from typing import List, Tuple, Any
 
 def get_fiducial_landmarks(predictor,image: List[List], rect: List[Tuple], args, window_name) -> List[Tuple]:
     # get Fiducials
@@ -13,6 +13,43 @@ def get_fiducial_landmarks(predictor,image: List[List], rect: List[Tuple], args,
 
     return fiducials
 
+def get_exclusive_landmarks(landmarks_a, landmarks_b, args):
+    exclude_landmarks = set()
+    list_a = set([])
+    for idx, landmark in enumerate(landmarks_a):
+        if tuple(landmark.tolist()) in list_a:
+            exclude_landmarks.add(idx)
+            if args.debug:
+                print(f"index of non-unique landmark a {idx}, {landmark}")
+        list_a.add(tuple(landmark.tolist()))
+
+
+    list_b = set([])
+    for idx, landmark in enumerate(landmarks_b):
+        if tuple(landmark.tolist()) in list_b:
+            exclude_landmarks.add(idx)
+            if args.debug:
+                print(f"index of non-unique landmark b {idx}, {landmark}")
+        list_b.add(tuple(landmark.tolist()))
+
+    # Remove fiducials that are causing inv to be singular
+    landmarks_a = np.delete(landmarks_a,list(exclude_landmarks),axis=0)
+    landmarks_b = np.delete(landmarks_b,list(exclude_landmarks),axis=0)
+    return landmarks_a, landmarks_b
+
+def append_rect_coords_to_landmarks(landmarks: List[Tuple], rect: Any) -> List[Tuple]:
+    """
+    TBF
+    """
+    # appending rectangle boundaries as landmarks
+    rect_bb_coords = dlib_rect_to_bbox_coords(rect)
+
+    # appending centres of bounding rect as landmarks
+    rect_side_centers = get_centers_of_rect_sides(rect)
+
+    return np.concatenate( (landmarks, rect_bb_coords, rect_side_centers), axis=0).astype(int)
+
+
 def homogenize_coords(coords: List[Tuple]) -> List[Tuple]:
     """
     nx2 -> nx3
@@ -20,6 +57,20 @@ def homogenize_coords(coords: List[Tuple]) -> List[Tuple]:
     ret = np.concatenate((coords,np.ones((coords.shape[0],1))),axis=1)
     return ret
 
+def get_mask_and_bounding_box(frame, landmarks):
+    mask = np.zeros(frame.shape, frame.dtype)
+    hull_points_to = cv2.convexHull(landmarks)
+    mask = cv2.fillConvexPoly(mask, hull_points_to, (255,255,255))
+    box = cv2.boundingRect(np.float32([hull_points_to.squeeze()]))
+    return mask,box
+
+def blend_frame_and_patch(frame,patch,mask,box):
+    x,y,w,h = box
+    cx,cy = (2*x+w)//2 , (2*y+h)//2
+    output = cv2.seamlessClone(np.uint16(patch),frame,mask,tuple([cx,cy]), cv2.NORMAL_CLONE)
+    return output
+
+    
 # Define what landmarks you want:
 JAWLINE_POINTS = list(range(0, 17))
 RIGHT_EYEBROW_POINTS = list(range(17, 22))
@@ -122,30 +173,29 @@ def rect_contains(rect, point) :
     return True
 
 # Draw delaunay triangles
-def draw_delaunay(img_orig, triangleList, window_name_prefix) :
-    img = img_orig.copy()
-    random.seed(45)
+def draw_delaunay(img, img_triangles, window_name_prefix) :
 
     size = img.shape
     r = (0, 0, size[1], size[0])
 
-    for t in triangleList :
+    for triangleList in img_triangles:
+        random.seed(45)
+        for t in triangleList :
 
-        pt1 = (int(t[0]), int(t[1]))
-        pt2 = (int(t[2]), int(t[3]))
-        pt3 = (int(t[4]), int(t[5]))
+            pt1 = (int(t[0]), int(t[1]))
+            pt2 = (int(t[2]), int(t[3]))
+            pt3 = (int(t[4]), int(t[5]))
 
-        if rect_contains(r, pt1) and rect_contains(r, pt2) and rect_contains(r, pt3) :
-            delaunay_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-            cv2.line(img, pt1, pt2, delaunay_color, 1, cv2.LINE_AA, 0)
-            cv2.line(img, pt2, pt3, delaunay_color, 1, cv2.LINE_AA, 0)
-            cv2.line(img, pt3, pt1, delaunay_color, 1, cv2.LINE_AA, 0)
+            if rect_contains(r, pt1) and rect_contains(r, pt2) and rect_contains(r, pt3) :
+                delaunay_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+                cv2.line(img, pt1, pt2, delaunay_color, 1, cv2.LINE_AA, 0)
+                cv2.line(img, pt2, pt3, delaunay_color, 1, cv2.LINE_AA, 0)
+                cv2.line(img, pt3, pt1, delaunay_color, 1, cv2.LINE_AA, 0)
 
     cv2.imshow(f"{window_name_prefix}_delaunay",img)
 
 # Draw voronoi diagram
-def draw_voronoi(img_orig, subdiv,window_name_prefix) :
-    img = img_orig.copy()
+def draw_voronoi(img, subdiv,window_name_prefix) :
 
     ( facets, centers) = subdiv.getVoronoiFacetList([])
     print(f"facets:{len(facets)}")
