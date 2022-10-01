@@ -103,7 +103,6 @@ def point_within_triangle1(point: Tuple, dst_inv: List[List], polygon) -> List[A
     cond = polygon.contains(Point(point[0], point[1]))
     if cond:
         point = np.array([point]).T
-        # print(f"point{point}")
         bary_coords = dst_inv @ point
         return True, bary_coords
 
@@ -151,11 +150,8 @@ def get_image_inverse_warping( frame: List[List],
     coords = np.concatenate((grid_xs, grid_ys), axis=0).T
 
     frame_copy = frame.copy()
-#    frame_copy[coords[:,1],coords[:,0]] = (255,255,255)
-#    cv2.imshow("white",frame_copy)
 
     coords = homogenize_coords(coords)
-    print(len(dst_bary_inverses))
     for j, dst_bary_inv in enumerate(dst_bary_inverses):
         bary_coords = dst_bary_inv @ coords.T
         coords_within = np.apply_along_axis(check_point_in_triangle,axis=0,arr=bary_coords)
@@ -171,18 +167,6 @@ def get_image_inverse_warping( frame: List[List],
 
         frame_copy[filtered_coords[1,:], filtered_coords[0,:], :] = frame[y, x, :]
 
-    # for pt in coords:
-    #     for j, dst_bary_inv in enumerate(dst_bary_inverses):
-    #         # in_triangle, barycentric_coord = point_within_triangle1(pt, dst_bary_inv, dst_polygons[j])
-    #         in_triangle, barycentric_coord = point_within_triangle(pt, dst_bary_inv)
-    #         if in_triangle:
-    #             # Get loc in src from barycentric_matrix and barycentric coordinate
-    #             src_loc = src_bary_matrices[j] @ barycentric_coord
-    #
-    #             # Unhomogenize loc -> (x, y)
-    #             x, y = int(src_loc[0]/src_loc[2]),int(src_loc[1]/src_loc[2])
-    #
-    #             frame_copy[int(pt[1]), int(pt[0]), :] = frame[y, x, :]
     return frame_copy 
 
 def main(args):
@@ -212,7 +196,8 @@ def main(args):
     for idx, landmark in enumerate(landmarks_a):
         if tuple(landmark.tolist()) in list_a:
             exclude_landmarks.add(idx)
-            print(f"index of non-unique landmark a {idx}, {landmark}")
+            if args.debug:
+                print(f"index of non-unique landmark a {idx}, {landmark}")
         list_a.add(tuple(landmark.tolist()))
 
     landmarks_b = get_fiducial_landmarks(predictor, frame, rect_b, args, 'b')
@@ -221,14 +206,13 @@ def main(args):
     for idx, landmark in enumerate(landmarks_b):
         if tuple(landmark.tolist()) in list_b:
             exclude_landmarks.add(idx)
-            print(f"index of non-unique landmark b {idx}, {landmark}")
+            if args.debug:
+                print(f"index of non-unique landmark b {idx}, {landmark}")
         list_b.add(tuple(landmark.tolist()))
 
     # Remove fiducials that are causing inv to be singular
     landmarks_a = np.delete(landmarks_a,list(exclude_landmarks),axis=0)
     landmarks_b = np.delete(landmarks_b,list(exclude_landmarks),axis=0)
-    print(landmarks_a.shape)
-    print(landmarks_b.shape)
 
     # Get delaunay triangulation
     triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")
