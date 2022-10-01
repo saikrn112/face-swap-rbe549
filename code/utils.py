@@ -13,6 +13,13 @@ def get_fiducial_landmarks(predictor,image: List[List], rect: List[Tuple], args,
 
     return fiducials
 
+def homogenize_coords(coords: List[Tuple]) -> List[Tuple]:
+    """
+    nx2 -> nx3
+    """
+    ret = np.concatenate((coords,np.ones((coords.shape[0],1))),axis=1)
+    return ret
+
 # Define what landmarks you want:
 JAWLINE_POINTS = list(range(0, 17))
 RIGHT_EYEBROW_POINTS = list(range(17, 22))

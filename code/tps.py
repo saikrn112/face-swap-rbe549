@@ -28,13 +28,6 @@ def append_rect_coords_to_landmarks(landmarks: List[Tuple], rect: Any) -> List[T
         (landmarks, rect_bb_coords, rect_side_centers), axis=0
     )
 
-def homogenize_coords(coords: List[Tuple]) -> List[Tuple]:
-    """
-    nx2 -> nx3
-    """
-    ret = np.concatenate((coords,np.ones((coords.shape[0],1))),axis=1)
-    return ret
-
 def get_k_matrix(landmarks: List[Tuple],coords: List[Tuple]) -> List[List]:
     """
     landmarks - nx2
