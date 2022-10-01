@@ -14,20 +14,6 @@ def append_zeros_to_landmarks(landmarks: List[Tuple]) -> List[Tuple]:
     ret = np.concatenate((landmarks,np.zeros((3,2))),axis=0)
     return ret
 
-def append_rect_coords_to_landmarks(landmarks: List[Tuple], rect: Any) -> List[Tuple]:
-    """
-    TBF
-    """
-    # appending rectangle boundaries as landmarks
-    rect_bb_coords = dlib_rect_to_bbox_coords(rect)
-
-    # appending centres of bounding rect as landmarks
-    rect_side_centers = get_centers_of_rect_sides(rect)
-
-    return np.concatenate(
-        (landmarks, rect_bb_coords, rect_side_centers), axis=0
-    )
-
 def get_k_matrix(landmarks: List[Tuple],coords: List[Tuple]) -> List[List]:
     """
     landmarks - nx2
@@ -87,7 +73,8 @@ def warp_patch(landmarks_from : List[Tuple],
                parameters     : List[Tuple], 
                frame          : List[List[Tuple]],
                canvas         : List[List[Tuple]],
-               patch_rect_to  : Any):
+               patch_rect_to  : Any,
+               suffix         : str):
     """
     landmarks_from  - nx2
     parameters      - (n+3)x2
@@ -96,15 +83,14 @@ def warp_patch(landmarks_from : List[Tuple],
     """
 
     # Filter coords from patch that lie within the convex hull of landmarks
-    mask = np.zeros((frame.shape[0], frame.shape[1]))
     landmarks_from_raw = landmarks_from[:-8].astype(np.int32)
-    hull_points_to = cv2.convexHull(landmarks_from_raw, returnPoints=True)
-    mask = cv2.fillConvexPoly(mask, hull_points_to, 1)
-    indices_from = np.argwhere(mask==1)
+    mask, box = get_mask_and_bounding_box(frame,landmarks_from_raw)
+    indices_from = np.argwhere(mask==(255,255,255))
 
     # Convert indices to coords because cv functions above changed the type
     coords_from = np.vstack((indices_from[:,1], indices_from[:,0])).T
 
+    # get inverse coordinates using TPS matrices
     tps_mat = get_tps_matrix(landmarks_from,coords_from, True) # mxn
     coords_to = tps_mat @ parameters
     coords_to = coords_to.astype(int)
@@ -112,9 +98,15 @@ def warp_patch(landmarks_from : List[Tuple],
     warped_patch_shape = dlib_rect_to_shape(patch_rect_to)
     warped_patch = np.zeros(shape=(warped_patch_shape[0],warped_patch_shape[1],3))
 
-    canvas[coords_from[:,1],coords_from[:,0],:] = frame[coords_to[:,1],coords_to[:,0],:]
+    #canvas[coords_from[:,1],coords_from[:,0],:] = frame[coords_to[:,1],coords_to[:,0],:]
 
-    return canvas
+    face = np.zeros(shape=frame.shape,dtype=frame.dtype)
+    face[coords_from[:,1],coords_from[:,0],:] = frame[coords_to[:,1],coords_to[:,0],:]
+    cv2.imshow(f"face_{suffix}",face)
+    cv2.imshow(f"mask_{suffix}",mask)
+
+    output = blend_frame_and_patch(canvas, face, mask, box)
+    return output 
     
 def main(args):
     display = args.display
@@ -126,10 +118,8 @@ def main(args):
     predictor = dlib.shape_predictor(predictor_model)
 
     # Read image/s
-    frame = cv2.imread("../data/selfie_4.jpeg")
-    print(frame.shape)
+    frame = cv2.imread("../data/selfie_5.jpeg")
     frame = cv2.resize(frame ,(550,400))
-    print(frame.shape)
 
     # each frame has two faces that needs to be swapped
     rects = detector(frame, 0)
@@ -144,6 +134,10 @@ def main(args):
         img_fiducials = frame.copy()
         draw_fiducials([landmarks_a,landmarks_b],img_fiducials,"ab")
 
+    # Remove fiducials that are causing inv to be singular
+    landmarks_a, landmarks_b = get_exclusive_landmarks(landmarks_a, landmarks_b,args)
+
+
     # Append rect corner and center coords as additional landmarks
     landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
     landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
@@ -154,8 +148,8 @@ def main(args):
 
     # Warp the patch
     canvas = frame.copy() # frame on which it has warp
-    warped_b = warp_patch(landmarks_b, warped_params_of_b, frame, canvas, rect_b)
-    warped_a = warp_patch(landmarks_a, warped_params_of_a, frame, canvas, rect_a)
+    canvas = warp_patch(landmarks_b, warped_params_of_b, frame, canvas, rect_b, "b")
+    canvas = warp_patch(landmarks_a, warped_params_of_a, frame, canvas, rect_a, "a")
 
     if args.display:
         cv2.imshow("frame",frame)

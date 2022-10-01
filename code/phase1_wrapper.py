@@ -15,11 +15,10 @@ def get_delaunay_triangulation(rect: List[Tuple],
     landmarks_subdiv.insert(landmarks.tolist())
     triangles_list = landmarks_subdiv.getTriangleList()
 
-    # Show triangulation
-    if args.display:
-        draw_delaunay(image_color,triangles_list,window_name)
-        if args.debug:
-            draw_voronoi(image_color,landmarks_subdiv,window_name)
+    if args.debug:
+        img_voronoi = frame.copy()
+        draw_voronoi(img_voronoi,landmarks_subdiv,window_name)
+
     return triangles_list
 
 def get_triangulation_for_src(dst_triangulation: List[List[int]],
@@ -50,10 +49,6 @@ def get_triangulation_for_src(dst_triangulation: List[List[int]],
                 *dst_fiducials[coords3_idx]
             ]
         )
-
-    # Show triangulation
-    if args.display:
-        draw_delaunay(image_color, src_triangulation, window_name)
 
     return src_triangulation
 
@@ -113,61 +108,59 @@ def construct_polygon(triangle):
     polygon = Polygon(map(Point,triangle))
     return polygon
 
-def get_image_inverse_warping( frame: List[List], 
-                            dst_rect_dlib: Any,
-                            src_triangles:  List[List[int]], 
-                            dst_triangles: List[List[int]], 
-                            args) -> List[List]:
+def get_image_inverse_warping(  landmarks_from  :  List[Tuple], 
+                                frame           :  List[List], 
+                                canvas          :  List[List],
+                                dst_rect_dlib   :  Any,
+                                src_triangles   :  List[List[int]], 
+                                dst_triangles   :  List[List[int]], 
+                                suffix          :  str,
+                                args)           -> List[List]:
 
     """
     we are replacing dst intensities from src intensities
     for that we are first inverse warping the dst coords to src
     """
+    # Filter coords from patch that lie within the convex hull of landmarks
+    landmarks_from_raw = landmarks_from[:-8].astype(np.int32)
+    mask, box = get_mask_and_bounding_box(frame,landmarks_from_raw)
+    indices_from = np.argwhere(mask==(255,255,255))
+
     # Get barycentric_matrix for src_triangles
     src_bary_matrices = [get_barycentric_matrix(src_tri) for src_tri in src_triangles]
-    if args.debug:
-        print(f"src_bary: {src_bary_matrices}")
 
     # Get inverse of barycentric_matrix for dst_triangles
     dst_bary_inverses = [get_barycentric_matrix(dst_tri, True) for dst_tri in dst_triangles]
     dst_polygons = [construct_polygon(dst_tri) for dst_tri in dst_triangles]
+
     if args.debug:
+        print(f"src_bary: {src_bary_matrices}")
         print(f"dst_inv: {dst_bary_inverses}")
 
-    # Get a grid
-    start_x = dst_rect_dlib.left()
-    end_x = dst_rect_dlib.right()
-    start_y = dst_rect_dlib.top()
-    end_y = dst_rect_dlib.bottom()
+    # Convert indices to coords because cv functions above changed the type
+    coords_from = np.vstack((indices_from[:,1], indices_from[:,0])).T
+    coords = homogenize_coords(coords_from).astype(int)
 
-    xs = np.arange(start_x, end_x+1, 1).astype(int)
-    ys = np.arange(start_y, end_y+1, 1).astype(int)
-
-    grid_xs, grid_ys = np.meshgrid(xs, ys)
-    grid_xs = np.array([grid_xs.flatten()])
-    grid_ys = np.array([grid_ys.flatten()])
-
-    coords = np.concatenate((grid_xs, grid_ys), axis=0).T
-
-    frame_copy = frame.copy()
-
-    coords = homogenize_coords(coords)
+    face = np.zeros(shape=frame.shape,dtype=frame.dtype)
     for j, dst_bary_inv in enumerate(dst_bary_inverses):
         bary_coords = dst_bary_inv @ coords.T
         coords_within = np.apply_along_axis(check_point_in_triangle,axis=0,arr=bary_coords)
         within_indxs = np.argwhere(coords_within==True).flatten().tolist()
-        filtered_coords = coords.T[:,within_indxs].astype(int)
+        filtered_coords = coords.T[:,within_indxs]
+
         # Get loc in src from barycentric_matrix and barycentric coordinate
         src_loc = src_bary_matrices[j] @ bary_coords[:,within_indxs]
 
         # Unhomogenize loc -> (x, y)
         x = (src_loc[0,:] / src_loc[2,:]).astype(int)
         y = (src_loc[1, :] / src_loc[2, :]).astype(int)
-        # x, y = int(src_loc[0,:] / src_loc[2,:]), int(src_loc[1,:] / src_loc[2,:])
 
-        frame_copy[filtered_coords[1,:], filtered_coords[0,:], :] = frame[y, x, :]
+        face[filtered_coords[1,:], filtered_coords[0,:], :] = frame[y, x, :]
 
-    return frame_copy 
+    cv2.imshow(f"face_{suffix}",face)
+    cv2.imshow(f"mask_{suffix}",mask)
+    output = blend_frame_and_patch(canvas, face, mask, box)
+    return output
 
 def main(args):
     display = args.display
@@ -179,7 +172,7 @@ def main(args):
     predictor = dlib.shape_predictor(predictor_model)
 
     # Read image/s
-    frame = cv2.imread("../data/selfie_3.jpeg")
+    frame = cv2.imread("../data/selfie_5.jpeg")
     frame = cv2.resize(frame,(550,400))
 
     # Each frame has two faces that need to be swapped
@@ -189,40 +182,37 @@ def main(args):
 
     # Get facial landmarks
     landmarks_a = get_fiducial_landmarks(predictor, frame, rect_a, args, 'a')
-
-    # Remove fiducials that are causing inv to be singular
-    exclude_landmarks = set()
-    list_a = set([])
-    for idx, landmark in enumerate(landmarks_a):
-        if tuple(landmark.tolist()) in list_a:
-            exclude_landmarks.add(idx)
-            if args.debug:
-                print(f"index of non-unique landmark a {idx}, {landmark}")
-        list_a.add(tuple(landmark.tolist()))
-
     landmarks_b = get_fiducial_landmarks(predictor, frame, rect_b, args, 'b')
 
-    list_b = set([])
-    for idx, landmark in enumerate(landmarks_b):
-        if tuple(landmark.tolist()) in list_b:
-            exclude_landmarks.add(idx)
-            if args.debug:
-                print(f"index of non-unique landmark b {idx}, {landmark}")
-        list_b.add(tuple(landmark.tolist()))
+    if args.display:
+        img_fiducials = frame.copy()
+        draw_fiducials([landmarks_a,landmarks_b],img_fiducials,"ab")
 
     # Remove fiducials that are causing inv to be singular
-    landmarks_a = np.delete(landmarks_a,list(exclude_landmarks),axis=0)
-    landmarks_b = np.delete(landmarks_b,list(exclude_landmarks),axis=0)
+    landmarks_a, landmarks_b = get_exclusive_landmarks(landmarks_a, landmarks_b,args)
+
+    # Append rect corner and center coords as additional landmarks
+    landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
+    landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
 
     # Get delaunay triangulation
+    print(landmarks_a)
     triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")
     triangle_list_b = get_triangulation_for_src(triangle_list_a, landmarks_a, landmarks_b, args, frame, "b")
 
+    # Show triangulation
+    if args.display:
+        img_tri = frame.copy()
+        draw_delaunay(img_tri,[triangle_list_a, triangle_list_b],"a")
+
     # Get inverse warpings for both crops
-    warp_img = get_image_inverse_warping(frame, rect_b, triangle_list_a, triangle_list_b, args)
+    canvas = frame.copy() # frame on which it has warp
+    canvas = get_image_inverse_warping(landmarks_b, frame, canvas, rect_b, triangle_list_a, triangle_list_b, "b", args)
+    canvas = get_image_inverse_warping(landmarks_a, frame, canvas, rect_a, triangle_list_b, triangle_list_a, "a", args)
     
     if args.display:
-        cv2.imshow("warp_img",warp_img)
+        cv2.imshow("frame",frame)
+        cv2.imshow("warped_img",canvas)
 
     if args.display:
         cv2.waitKey(0)
