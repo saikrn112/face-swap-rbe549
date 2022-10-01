@@ -5,6 +5,7 @@ from typing import List, Tuple, Any
 from utils import *
 import argparse
 from shapely.geometry import Point, Polygon
+import time
 
 def get_delaunay_triangulation(rect: List[Tuple],
                                 landmarks: List[Tuple],
@@ -151,25 +152,40 @@ def get_image_inverse_warping( frame: List[List],
     coords = np.concatenate((grid_xs, grid_ys), axis=0).T
 
     frame_copy = frame.copy()
-#    frame_copy[coords[:,1],coords[:,0]] = (255,255,255)
-#    cv2.imshow("white",frame_copy)
 
     coords = homogenize_coords(coords)
-    print(len(dst_bary_inverses))
-    for j, dst_bary_inv in enumerate(dst_bary_inverses):
-        bary_coords = dst_bary_inv @ coords.T
-        coords_within = np.apply_along_axis(check_point_in_triangle,axis=0,arr=bary_coords)
-        within_indxs = np.argwhere(coords_within==True).flatten().tolist()
-        filtered_coords = coords.T[:,within_indxs].astype(int)
-        # Get loc in src from barycentric_matrix and barycentric coordinate
-        src_loc = src_bary_matrices[j] @ bary_coords[:,within_indxs]
 
-        # Unhomogenize loc -> (x, y)
-        x = (src_loc[0,:] / src_loc[2,:]).astype(int)
-        y = (src_loc[1, :] / src_loc[2, :]).astype(int)
-        # x, y = int(src_loc[0,:] / src_loc[2,:]), int(src_loc[1,:] / src_loc[2,:])
+#    dst_bary_inverses = np.stack(dst_bary_inverses, axis=2)
+#    print(dst_bary_inverses.shape)
+#    print(coords.T.shape)
+#    bary_coords = np.tensordot(dst_bary_inverses,coords.T,axes=[1,0]).swapaxes(2,1)
+#    print(bary_coords.shape)
+#    start_time = time.time()
+#    coords_within = np.apply_along_axis(check_point_in_triangle,axis=0,arr=bary_coords)
+#    within_inds = np.argwhere(coords_within==True)
+#    end_time = time.time()
+#    print(end_time - start_time)
+#    print(coords_within.shape)
+#    print(within_inds.shape)
+#    exit(1)
+#    start_time = time.time()
+#    for j, dst_bary_inv in enumerate(dst_bary_inverses):
+#        bary_coords = dst_bary_inv @ coords.T
+#        bary_coords = np.expand_dims(bary_coords,axis=2)
+#    end_time = time.time()
+#    print(end_time - start_time)
+    coords_within = np.apply_along_axis(check_point_in_triangle,axis=0,arr=bary_coords)
+    within_indxs = np.argwhere(coords_within==True).flatten().tolist()
+    filtered_coords = coords.T[:,within_indxs].astype(int)
+    # Get loc in src from barycentric_matrix and barycentric coordinate
+    src_loc = src_bary_matrices[j] @ bary_coords[:,within_indxs]
 
-        frame_copy[filtered_coords[1,:], filtered_coords[0,:], :] = frame[y, x, :]
+    # Unhomogenize loc -> (x, y)
+    x = (src_loc[0,:] / src_loc[2,:]).astype(int)
+    y = (src_loc[1, :] / src_loc[2, :]).astype(int)
+    # x, y = int(src_loc[0,:] / src_loc[2,:]), int(src_loc[1,:] / src_loc[2,:])
+
+    frame_copy[filtered_coords[1,:], filtered_coords[0,:], :] = frame[y, x, :]
 
     # for pt in coords:
     #     for j, dst_bary_inv in enumerate(dst_bary_inverses):
@@ -229,6 +245,10 @@ def main(args):
     landmarks_b = np.delete(landmarks_b,list(exclude_landmarks),axis=0)
     print(landmarks_a.shape)
     print(landmarks_b.shape)
+
+    # Append rect corner and center coords as additional landmarks
+    landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
+    landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
 
     # Get delaunay triangulation
     triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")

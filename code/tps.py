@@ -14,19 +14,6 @@ def append_zeros_to_landmarks(landmarks: List[Tuple]) -> List[Tuple]:
     ret = np.concatenate((landmarks,np.zeros((3,2))),axis=0)
     return ret
 
-def append_rect_coords_to_landmarks(landmarks: List[Tuple], rect: Any) -> List[Tuple]:
-    """
-    TBF
-    """
-    # appending rectangle boundaries as landmarks
-    rect_bb_coords = dlib_rect_to_bbox_coords(rect)
-
-    # appending centres of bounding rect as landmarks
-    rect_side_centers = get_centers_of_rect_sides(rect)
-
-    return np.concatenate(
-        (landmarks, rect_bb_coords, rect_side_centers), axis=0
-    )
 
 def get_k_matrix(landmarks: List[Tuple],coords: List[Tuple]) -> List[List]:
     """

@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import dlib
 import random
-from typing import List, Tuple
+from typing import List, Tuple, Any
 
 def get_fiducial_landmarks(predictor,image: List[List], rect: List[Tuple], args, window_name) -> List[Tuple]:
     # get Fiducials
@@ -19,6 +19,20 @@ def homogenize_coords(coords: List[Tuple]) -> List[Tuple]:
     """
     ret = np.concatenate((coords,np.ones((coords.shape[0],1))),axis=1)
     return ret
+
+def append_rect_coords_to_landmarks(landmarks: List[Tuple], rect: Any) -> List[Tuple]:
+    """
+    TBF
+    """
+    # appending rectangle boundaries as landmarks
+    rect_bb_coords = dlib_rect_to_bbox_coords(rect)
+
+    # appending centres of bounding rect as landmarks
+    rect_side_centers = get_centers_of_rect_sides(rect)
+
+    return np.concatenate(
+        (landmarks, rect_bb_coords, rect_side_centers), axis=0
+    )
 
 # Define what landmarks you want:
 JAWLINE_POINTS = list(range(0, 17))
