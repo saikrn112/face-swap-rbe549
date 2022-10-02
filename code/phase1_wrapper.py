@@ -63,13 +63,30 @@ def get_barycentric_matrix(tri_coords: List[int], get_inv: bool=False) -> List[L
     mat = np.concatenate([mat, np.ones((3, 1))], axis=1).T
 
     if get_inv:
-        try:
+#        try:
+        if np.linalg.det(mat) != 0:
             inv = np.linalg.inv(mat)
-            return inv
-        except:
-            print("singular:", tri_coords)
-            exit(1)
+        else:
+            inv = np.linalg.pinv(mat)
+        return inv
+#        except:
+#            print("singular:", tri_coords)
+#            exit(1)
     return mat
+
+def adjust_dlib_rectangle(rect,landmarks):
+    min_x_l = np.min(landmarks[:,0])
+    max_x_l = np.max(landmarks[:,0])
+    min_y_l = np.min(landmarks[:,1])
+    max_y_l = np.max(landmarks[:,1])
+
+    min_x   = np.min([min_x_l, rect.left()])
+    max_x   = np.max([max_x_l, rect.right()])
+    min_y   = np.min([min_y_l, rect.top()])
+    max_y   = np.max([max_y_l, rect.bottom()])
+
+    rect_mod  = dlib.rectangle(min_x,min_y,max_x,max_y)
+    return rect_mod
 
 def check_point_in_triangle(point):
     """
@@ -203,6 +220,10 @@ def main(args):
         # Append rect corner and center coords as additional landmarks
         landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
         landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
+
+        rect_a = adjust_dlib_rectangle(rect_a,landmarks_a)
+        rect_b = adjust_dlib_rectangle(rect_b,landmarks_b)
+
 
         # Get delaunay triangulation
         # print(landmarks_a)
