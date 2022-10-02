@@ -63,13 +63,30 @@ def get_barycentric_matrix(tri_coords: List[int], get_inv: bool=False) -> List[L
     mat = np.concatenate([mat, np.ones((3, 1))], axis=1).T
 
     if get_inv:
-        try:
+#        try:
+        if np.linalg.det(mat) != 0:
             inv = np.linalg.inv(mat)
-            return inv
-        except:
-            print("singular:", tri_coords)
-            exit(1)
+        else:
+            inv = np.linalg.pinv(mat)
+        return inv
+#        except:
+#            print("singular:", tri_coords)
+#            exit(1)
     return mat
+
+def adjust_dlib_rectangle(rect,landmarks):
+    min_x_l = np.min(landmarks[:,0])
+    max_x_l = np.max(landmarks[:,0])
+    min_y_l = np.min(landmarks[:,1])
+    max_y_l = np.max(landmarks[:,1])
+
+    min_x   = np.min([min_x_l, rect.left()])
+    max_x   = np.max([max_x_l, rect.right()])
+    min_y   = np.min([min_y_l, rect.top()])
+    max_y   = np.max([max_y_l, rect.bottom()])
+
+    rect_mod  = dlib.rectangle(min_x,min_y,max_x,max_y)
+    return rect_mod
 
 def check_point_in_triangle(point):
     """
@@ -167,63 +184,75 @@ def get_image_inverse_warping(  landmarks_from  :  List[Tuple],
 def main(args):
     display = args.display
     debug = args.debug
+
+    out = cv2.VideoWriter('../data/result_del_tri.avi',
+                          cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 10,
+                          (600, 338))
+
     predictor_model = "../data/shape_predictor_68_face_landmarks.dat"
 
     # Initialize frontal face detector and shape predictor:
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor(predictor_model)
 
-    # Read image/s
+    cap = cv2.VideoCapture("../data/sample_video1.gif")
+    while True:
+        _, frame = cap.read()
+        # Read image/s
 
-    frame = cv2.imread("../data/selfie_1.jpeg")
-    frame = cv2.resize(frame,(550,400))
 
-    # Each frame has two faces that need to be swapped
-    rects = detector(frame, 0)
-    rect_a = rects[0]
-    rect_b = rects[1]
+        # Each frame has two faces that need to be swapped
+        rects = detector(frame, 0)
+        rect_a = rects[0]
+        rect_b = rects[1]
 
-    # Get facial landmarks
-    landmarks_a = get_fiducial_landmarks(predictor, frame, rect_a, args, 'a')
-    landmarks_b = get_fiducial_landmarks(predictor, frame, rect_b, args, 'b')
+        # Get facial landmarks
+        landmarks_a = get_fiducial_landmarks(predictor, frame, rect_a, args, 'a')
+        landmarks_b = get_fiducial_landmarks(predictor, frame, rect_b, args, 'b')
 
-    if args.display:
-        img_fiducials = frame.copy()
-        draw_fiducials([landmarks_a,landmarks_b],img_fiducials,"ab")
+        # if args.display:
+        #     img_fiducials = frame.copy()
+        #     draw_fiducials([landmarks_a,landmarks_b],img_fiducials,"ab")
 
-    # Remove fiducials that are causing inv to be singular
-    landmarks_a, landmarks_b = get_exclusive_landmarks(landmarks_a, landmarks_b,args)
+        # Remove fiducials that are causing inv to be singular
+        landmarks_a, landmarks_b = get_exclusive_landmarks(landmarks_a, landmarks_b,args)
 
-    # Append rect corner and center coords as additional landmarks
-#    landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
-#    landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
+        # Append rect corner and center coords as additional landmarks
+        landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
+        landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
 
-    # Get delaunay triangulation
-    triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")
-    _ = get_delaunay_triangulation(rect_b, landmarks_b, args, frame, "b")
-    triangle_list_b = get_triangulation_for_src(triangle_list_a, landmarks_a, landmarks_b, args, frame, "b")
+        rect_a = adjust_dlib_rectangle(rect_a,landmarks_a)
+        rect_b = adjust_dlib_rectangle(rect_b,landmarks_b)
 
-    # Show triangulation
-    if args.display:
-        img_tri = frame.copy()
-        draw_delaunay(img_tri,[triangle_list_a, triangle_list_b],"a")
 
-    # Get inverse warpings for both crops
-    canvas = frame.copy() # frame on which it has warp
-    start = time.time()
-    canvas = get_image_inverse_warping(landmarks_b, frame, canvas, rect_b, triangle_list_a, triangle_list_b, "b", args)
-    canvas = get_image_inverse_warping(landmarks_a, frame, canvas, rect_a, triangle_list_b, triangle_list_a, "a", args)
-    end = time.time()
-    print(f"latency:{end - start}")
+        # Get delaunay triangulation
+        # print(landmarks_a)
+        triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")
+        _               = get_delaunay_triangulation(rect_b, landmarks_b, args, frame, "b")
+        triangle_list_b = get_triangulation_for_src(triangle_list_a, landmarks_a, landmarks_b, args, frame, "b")
+
+        # Show triangulation
+        # if args.display:
+        #     img_tri = frame.copy()
+        #     draw_delaunay(img_tri,[triangle_list_a, triangle_list_b],"a")
+
+        # Get inverse warpings for both crops
+        canvas = frame.copy() # frame on which it has warp
+        canvas = get_image_inverse_warping(landmarks_b, frame, canvas, rect_b, triangle_list_a, triangle_list_b, "b", args)
+        canvas = get_image_inverse_warping(landmarks_a, frame, canvas, rect_a, triangle_list_b, triangle_list_a, "a", args)
+
+        if args.display:
+            cv2.imshow("frame",frame)
+            cv2.imshow("warped_img",canvas)
+
+        out.write(canvas)
+
+        if args.display:
+            cv2.waitKey(1)
     
-    if args.display:
-        cv2.imshow("frame",frame)
-        cv2.imshow("warped_img",canvas)
-
-    if args.display:
-        cv2.waitKey(0)
-    
-
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
