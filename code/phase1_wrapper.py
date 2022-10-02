@@ -5,11 +5,12 @@ from typing import List, Tuple, Any
 from utils import *
 import argparse
 from shapely.geometry import Point, Polygon
+import time
 
 def get_delaunay_triangulation(rect: List[Tuple],
                                 landmarks: List[Tuple],
                                 args,
-                                image_color,
+                                frame,
                                 window_name) -> List[List[int]]:
     landmarks_subdiv = cv2.Subdiv2D(dlib_rect_to_tuple(rect))
     landmarks_subdiv.insert(landmarks.tolist())
@@ -74,8 +75,9 @@ def check_point_in_triangle(point):
     """
     point - 1 X 3
     """
-    if ((0 <= point) & (point <= 1)).all() \
-            and (0 < np.sum(point) <= 1):
+    eps = 1e-6
+    if ((0-eps <= point) & (point <= 1+eps)).all() \
+            and (0-eps < np.sum(point) <= 1+eps):
         return True
     return False
 
@@ -179,6 +181,8 @@ def main(args):
     cap = cv2.VideoCapture("../data/sample_video1.gif")
     while True:
         _, frame = cap.read()
+        # Read image/s
+
 
         # Each frame has two faces that need to be swapped
         rects = detector(frame, 0)
@@ -203,6 +207,7 @@ def main(args):
         # Get delaunay triangulation
         # print(landmarks_a)
         triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")
+        _               = get_delaunay_triangulation(rect_b, landmarks_b, args, frame, "b")
         triangle_list_b = get_triangulation_for_src(triangle_list_a, landmarks_a, landmarks_b, args, frame, "b")
 
         # Show triangulation

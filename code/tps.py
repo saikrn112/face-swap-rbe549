@@ -4,6 +4,7 @@ import dlib
 from typing import List, Tuple, Any
 from utils import *
 import argparse
+import time
 #### NOTE any coords below is actually array indices
 
 def append_zeros_to_landmarks(landmarks: List[Tuple]) -> List[Tuple]:
@@ -153,9 +154,6 @@ def main(args):
         canvas = warp_patch(landmarks_b, warped_params_of_b, frame, canvas, rect_b, "b")
         canvas = warp_patch(landmarks_a, warped_params_of_a, frame, canvas, rect_a, "a")
 
-        if args.display:
-            cv2.imshow("frame",frame)
-            cv2.imshow("warped_frame",canvas)
 
         out.write(canvas)
 
