@@ -5,11 +5,12 @@ from typing import List, Tuple, Any
 from utils import *
 import argparse
 from shapely.geometry import Point, Polygon
+import time
 
 def get_delaunay_triangulation(rect: List[Tuple],
                                 landmarks: List[Tuple],
                                 args,
-                                image_color,
+                                frame,
                                 window_name) -> List[List[int]]:
     landmarks_subdiv = cv2.Subdiv2D(dlib_rect_to_tuple(rect))
     landmarks_subdiv.insert(landmarks.tolist())
@@ -173,7 +174,8 @@ def main(args):
     predictor = dlib.shape_predictor(predictor_model)
 
     # Read image/s
-    frame = cv2.imread("../data/selfie_3.jpeg")
+
+    frame = cv2.imread("../data/selfie_1.jpeg")
     frame = cv2.resize(frame,(550,400))
 
     # Each frame has two faces that need to be swapped
@@ -193,11 +195,12 @@ def main(args):
     landmarks_a, landmarks_b = get_exclusive_landmarks(landmarks_a, landmarks_b,args)
 
     # Append rect corner and center coords as additional landmarks
-    landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
-    landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
+#    landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
+#    landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
 
     # Get delaunay triangulation
     triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")
+    _ = get_delaunay_triangulation(rect_b, landmarks_b, args, frame, "b")
     triangle_list_b = get_triangulation_for_src(triangle_list_a, landmarks_a, landmarks_b, args, frame, "b")
 
     # Show triangulation
@@ -207,8 +210,11 @@ def main(args):
 
     # Get inverse warpings for both crops
     canvas = frame.copy() # frame on which it has warp
+    start = time.time()
     canvas = get_image_inverse_warping(landmarks_b, frame, canvas, rect_b, triangle_list_a, triangle_list_b, "b", args)
     canvas = get_image_inverse_warping(landmarks_a, frame, canvas, rect_a, triangle_list_b, triangle_list_a, "a", args)
+    end = time.time()
+    print(f"latency:{end - start}")
     
     if args.display:
         cv2.imshow("frame",frame)
