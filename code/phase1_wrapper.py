@@ -75,8 +75,9 @@ def check_point_in_triangle(point):
     """
     point - 1 X 3
     """
-    if ((0 <= point) & (point <= 1)).all() \
-            and (0 < np.sum(point) <= 1):
+    eps = 1e-6
+    if ((0-eps <= point) & (point <= 1+eps)).all() \
+            and (0-eps < np.sum(point) <= 1+eps):
         return True
     return False
 
@@ -173,6 +174,7 @@ def main(args):
     predictor = dlib.shape_predictor(predictor_model)
 
     # Read image/s
+
     frame = cv2.imread("../data/selfie_1.jpeg")
     frame = cv2.resize(frame,(550,400))
 
@@ -197,7 +199,6 @@ def main(args):
 #    landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
 
     # Get delaunay triangulation
-    print(landmarks_a)
     triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")
     _ = get_delaunay_triangulation(rect_b, landmarks_b, args, frame, "b")
     triangle_list_b = get_triangulation_for_src(triangle_list_a, landmarks_a, landmarks_b, args, frame, "b")
