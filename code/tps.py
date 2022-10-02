@@ -4,6 +4,7 @@ import dlib
 from typing import List, Tuple, Any
 from utils import *
 import argparse
+import time
 #### NOTE any coords below is actually array indices
 
 def append_zeros_to_landmarks(landmarks: List[Tuple]) -> List[Tuple]:
@@ -118,7 +119,7 @@ def main(args):
     predictor = dlib.shape_predictor(predictor_model)
 
     # Read image/s
-    frame = cv2.imread("../data/selfie_5.jpeg")
+    frame = cv2.imread("../data/selfie_6.jpeg")
     frame = cv2.resize(frame ,(550,400))
 
     # each frame has two faces that needs to be swapped
@@ -148,8 +149,11 @@ def main(args):
 
     # Warp the patch
     canvas = frame.copy() # frame on which it has warp
+    start = time.time()
     canvas = warp_patch(landmarks_b, warped_params_of_b, frame, canvas, rect_b, "b")
     canvas = warp_patch(landmarks_a, warped_params_of_a, frame, canvas, rect_a, "a")
+    end = time.time()
+    print(f"latency:{end - start}")
 
     if args.display:
         cv2.imshow("frame",frame)
