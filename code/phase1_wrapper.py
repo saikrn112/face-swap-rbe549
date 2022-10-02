@@ -165,59 +165,68 @@ def get_image_inverse_warping(  landmarks_from  :  List[Tuple],
 def main(args):
     display = args.display
     debug = args.debug
+
+    out = cv2.VideoWriter('../data/result_del_tri.avi',
+                          cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 10,
+                          (600, 338))
+
     predictor_model = "../data/shape_predictor_68_face_landmarks.dat"
 
     # Initialize frontal face detector and shape predictor:
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor(predictor_model)
 
-    # Read image/s
-    frame = cv2.imread("../data/selfie_5.jpeg")
-    frame = cv2.resize(frame,(550,400))
+    cap = cv2.VideoCapture("../data/sample_video1.gif")
+    while True:
+        _, frame = cap.read()
 
-    # Each frame has two faces that need to be swapped
-    rects = detector(frame, 0)
-    rect_a = rects[0]
-    rect_b = rects[1]
+        # Each frame has two faces that need to be swapped
+        rects = detector(frame, 0)
+        rect_a = rects[0]
+        rect_b = rects[1]
 
-    # Get facial landmarks
-    landmarks_a = get_fiducial_landmarks(predictor, frame, rect_a, args, 'a')
-    landmarks_b = get_fiducial_landmarks(predictor, frame, rect_b, args, 'b')
+        # Get facial landmarks
+        landmarks_a = get_fiducial_landmarks(predictor, frame, rect_a, args, 'a')
+        landmarks_b = get_fiducial_landmarks(predictor, frame, rect_b, args, 'b')
 
-    if args.display:
-        img_fiducials = frame.copy()
-        draw_fiducials([landmarks_a,landmarks_b],img_fiducials,"ab")
+        # if args.display:
+        #     img_fiducials = frame.copy()
+        #     draw_fiducials([landmarks_a,landmarks_b],img_fiducials,"ab")
 
-    # Remove fiducials that are causing inv to be singular
-    landmarks_a, landmarks_b = get_exclusive_landmarks(landmarks_a, landmarks_b,args)
+        # Remove fiducials that are causing inv to be singular
+        landmarks_a, landmarks_b = get_exclusive_landmarks(landmarks_a, landmarks_b,args)
 
-    # Append rect corner and center coords as additional landmarks
-    landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
-    landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
+        # Append rect corner and center coords as additional landmarks
+        landmarks_a = append_rect_coords_to_landmarks(landmarks_a, rect_a)
+        landmarks_b = append_rect_coords_to_landmarks(landmarks_b, rect_b)
 
-    # Get delaunay triangulation
-    print(landmarks_a)
-    triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")
-    triangle_list_b = get_triangulation_for_src(triangle_list_a, landmarks_a, landmarks_b, args, frame, "b")
+        # Get delaunay triangulation
+        # print(landmarks_a)
+        triangle_list_a = get_delaunay_triangulation(rect_a, landmarks_a, args, frame, "a")
+        triangle_list_b = get_triangulation_for_src(triangle_list_a, landmarks_a, landmarks_b, args, frame, "b")
 
-    # Show triangulation
-    if args.display:
-        img_tri = frame.copy()
-        draw_delaunay(img_tri,[triangle_list_a, triangle_list_b],"a")
+        # Show triangulation
+        # if args.display:
+        #     img_tri = frame.copy()
+        #     draw_delaunay(img_tri,[triangle_list_a, triangle_list_b],"a")
 
-    # Get inverse warpings for both crops
-    canvas = frame.copy() # frame on which it has warp
-    canvas = get_image_inverse_warping(landmarks_b, frame, canvas, rect_b, triangle_list_a, triangle_list_b, "b", args)
-    canvas = get_image_inverse_warping(landmarks_a, frame, canvas, rect_a, triangle_list_b, triangle_list_a, "a", args)
+        # Get inverse warpings for both crops
+        canvas = frame.copy() # frame on which it has warp
+        canvas = get_image_inverse_warping(landmarks_b, frame, canvas, rect_b, triangle_list_a, triangle_list_b, "b", args)
+        canvas = get_image_inverse_warping(landmarks_a, frame, canvas, rect_a, triangle_list_b, triangle_list_a, "a", args)
+
+        if args.display:
+            cv2.imshow("frame",frame)
+            cv2.imshow("warped_img",canvas)
+
+        out.write(canvas)
+
+        if args.display:
+            cv2.waitKey(1)
     
-    if args.display:
-        cv2.imshow("frame",frame)
-        cv2.imshow("warped_img",canvas)
-
-    if args.display:
-        cv2.waitKey(0)
-    
-
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
