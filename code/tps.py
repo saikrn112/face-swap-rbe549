@@ -122,14 +122,98 @@ def main(args):
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor(predictor_model)
 
+    # Initialize the kalman filter
+    kalman = cv2.KalmanFilter(8,4) # do it for one coordinate and expand it for bounding box
+    kalman.measurementMatrix = np.array([
+                                        [1,0,0,0,0,0,0,0],
+                                        [0,1,0,0,0,0,0,0],
+                                        [0,0,1,0,0,0,0,0],
+                                        [0,0,0,1,0,0,0,0]
+                                        ],np.float32)
+    kalman.transitionMatrix = np.array([
+                                        [1,0,0,0,1,0,0,0],
+                                        [0,1,0,0,0,1,0,0],
+                                        [0,0,1,0,0,0,1,0],
+                                        [0,0,0,1,0,0,0,1],
+                                        [0,0,0,0,1,0,0,0],
+                                        [0,0,0,0,0,1,0,0],
+                                        [0,0,0,0,0,0,1,0],
+                                        [0,0,0,0,0,0,0,1]
+                                        ],np.float32)
+    kalman.processNoiseCov = np.array([
+                                        [1,0,0,0,0,0,0,0],
+                                        [0,1,0,0,0,0,0,0],
+                                        [0,0,1,0,0,0,0,0],
+                                        [0,0,0,1,0,0,0,0],
+                                        [0,0,0,0,1,0,0,0],
+                                        [0,0,0,0,0,1,0,0],
+                                        [0,0,0,0,0,0,1,0],
+                                        [0,0,0,0,0,0,0,1],
+                                        ],np.float32) * 0.03
+    mp = np.array((2,1,4,2), np.float32) # measurement
+    tp = np.zeros((2,1,4,2), np.float32) # tracked / prediction
+
     cap = cv2.VideoCapture("../data/sample_video1.gif")
-    while True:
-        _, frame = cap.read()
+    success , frame = cap.read()
+    rect_a_prev = None
+    rect_b_prev = None
+    motion_eps = 20
+    first_iter = True
+    while success:
 
         rects = detector(frame, 0)
         rect_a = rects[0]
         rect_b = rects[1]
 
+        if rect_a_prev is not None and (rect_a_prev.right() - rect_a.right() > motion_eps):
+            tmp = rect_a
+            rect_a = rect_b
+            rect_b = tmp
+        rect_a_prev = rect_a
+        rect_b_prev = rect_b
+
+        # add rectangle bounding box to motion filtering
+        if (not first_iter):
+            kalman.correct(np.array((rect_a.left(),rect_a.top(),rect_a.right(),rect_a.bottom()),np.float32))
+            tp = kalman.predict()
+
+            print(f"prediction:{tp[0][0],tp[1],tp[2],tp[3]}, measurement:{rect_a.left(),rect_a.top(),rect_a.right(),rect_a.bottom()}")
+
+            start_point = (rect_a.left(),rect_a.top())
+            end_point   = (rect_a.right(),rect_a.bottom())
+            color       = (255,0,0)
+            thickness   = 2
+            frame_copy = frame.copy()
+            cv2.rectangle(frame_copy, start_point, end_point, color, thickness)
+
+            if tp[0] >= frame.shape[1]:
+                tp[0] = frame.shape[1] - 1
+            if tp[1] >= frame.shape[0]:
+                tp[1] = frame.shape[0] - 1
+            if tp[2] >= frame.shape[1]:
+                tp[2] = frame.shape[1] - 1
+            if tp[3] >= frame.shape[0]:
+                tp[3] = frame.shape[0] - 1
+            new_rect_start    = (int(tp[0]),int(tp[1]))
+            new_rect_end    = (int(tp[2]),int(tp[3]))
+            color       = (0,255,0)
+            thickness   = 2
+            cv2.rectangle(frame_copy, new_rect_start, new_rect_end, color, thickness)
+            cv2.imshow("kalman",frame_copy)
+
+            #rect_a = dlib.rectangle(tp[0],tp[1],tp[2],tp[3])
+        elif first_iter:
+            kalman.correct(np.array((rect_a.left(),rect_a.top(),rect_a.right(),rect_a.bottom()),np.float32))
+            kalman.predict()
+            kalman.correct(np.array((rect_a.left(),rect_a.top(),rect_a.right(),rect_a.bottom()),np.float32))
+            kalman.predict()
+            kalman.correct(np.array((rect_a.left(),rect_a.top(),rect_a.right(),rect_a.bottom()),np.float32))
+            kalman.predict()
+            kalman.correct(np.array((rect_a.left(),rect_a.top(),rect_a.right(),rect_a.bottom()),np.float32))
+            kalman.predict()
+            first_iter = False
+
+        print(f"rect_a:{rect_a}")
         # Get facial landmarks
         landmarks_a = get_fiducial_landmarks(predictor,frame,rect_a,args,"a")
         landmarks_b = get_fiducial_landmarks(predictor,frame,rect_b,args,"b")
@@ -157,9 +241,16 @@ def main(args):
 
         out.write(canvas)
 
+
+
         # Display
         if args.display:
-            cv2.waitKey(1)
+            cv2.imshow("frame",canvas)
+            cv2.waitKey(0)
+
+        success , frame = cap.read()
+
+
 
     cap.release()
     out.release()

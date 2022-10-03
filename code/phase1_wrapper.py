@@ -195,21 +195,38 @@ def main(args):
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor(predictor_model)
 
+    # Initialize the kalman filter
+    kalman = cv2.KalmanFilter(4,2) # do it for one coordinate and expand it for bounding box
+    kalman.measurementMatrix = np.array([[1,0,0,0],[0,1,0,0]],np.float32)
+    kalman.transitionMatrix = np.array([[1,0,1,0],[0,1,0,1],[0,0,1,0],[0,0,0,1]],np.float32)
+    kalman.processNoiseCov = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]],np.float32) * 0.03
+    mp = np.array((2,1), np.float32) # measurement
+    tp = np.zeros((2,1), np.float32) # tracked / prediction
+
     cap = cv2.VideoCapture("../data/sample_video1.gif")
     while True:
-        _, frame = cap.read()
-        # Read image/s
+        kalman.correct(mp)
 
+        # capture frame from video
+        success, frame = cap.read()
+
+        ## Read image/s
 
         # Each frame has two faces that need to be swapped
         rects = detector(frame, 0)
         rect_a = rects[0]
         rect_b = rects[1]
 
+        # add rectangle bounding box to motion filtering
+        kalman.correct(np.array((rect_a.left(),rect_a.top()),np.float32))
+        tp = kalman.predict()
+        pred.append((int(tp[0]),int(tp[1])))
+
         # Get facial landmarks
         landmarks_a = get_fiducial_landmarks(predictor, frame, rect_a, args, 'a')
         landmarks_b = get_fiducial_landmarks(predictor, frame, rect_b, args, 'b')
 
+        # TODO this function is broke
         # if args.display:
         #     img_fiducials = frame.copy()
         #     draw_fiducials([landmarks_a,landmarks_b],img_fiducials,"ab")
@@ -223,7 +240,6 @@ def main(args):
 
         rect_a = adjust_dlib_rectangle(rect_a,landmarks_a)
         rect_b = adjust_dlib_rectangle(rect_b,landmarks_b)
-
 
         # Get delaunay triangulation
         # print(landmarks_a)
