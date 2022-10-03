@@ -159,7 +159,8 @@ def main(args):
 
         # Display
         if args.display:
-            cv2.waitKey(1)
+            cv2.imshow("frame",canvas)
+            cv2.waitKey(0)
 
     cap.release()
     out.release()
